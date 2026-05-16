@@ -36,6 +36,7 @@ RTL8139_TX_BUF equ 0x90000     ; TX buffer
 ; =========================
 rtl_rx_offset  dd 0
 rtl_tx_id      db 0
+rtl8139_present dd 0
 
 ; =========================
 ; FLAGS
@@ -74,6 +75,18 @@ rtl_tx_id      db 0
 rtl8139_init:
     pusha
 
+    ; Verificar presencia mínima del dispositivo
+    mov dx, RTL8139_IO_BASE + RTL_CMD
+    in al, dx
+    cmp al, 0xFF
+    jne .device_ok
+    mov dword [rtl8139_present], 0
+    popa
+    xor eax, eax
+    ret
+.device_ok:
+    mov dword [rtl8139_present], 1
+
     ; Encender dispositivo
     OUTB (RTL8139_IO_BASE + RTL_CONFIG1), 0x00
 
@@ -100,6 +113,7 @@ rtl8139_init:
     mov byte  [rtl_tx_id], 0
 
     popa
+    mov eax, 1
     ret
 
 ; ==================================================================
