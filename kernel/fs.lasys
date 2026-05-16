@@ -62,7 +62,7 @@ fs_create_file:
     add eax, DATA_LBA
     mov [edi+16], eax   ; LBA
     mov dword [edi+20], 0 ; tamaño
-    mov byte [edi+24], al ; flag
+    mov byte [edi+24], FLAG_FILE ; flag
     call fs_save_dir
     ret
 
@@ -77,11 +77,16 @@ fs_read_file:
     push esi
     mov edx,16
 .compare:
-    lodsb
-    cmp al,[edi]
+    mov al, [esi]
+    cmp al, [edi]
     jne .not_match
+    cmp al, 0
+    je .match_done
+    inc esi
     inc edi
-    loop .compare
+    dec edx
+    jnz .compare
+.match_done:
     pop esi
     pop edi
     ; encontrado
@@ -103,6 +108,7 @@ fs_read_file:
     ret
 
 fs_write_file:
+    mov ebp, ecx            ; preservar tamaño a guardar
     mov edi, DIR_BUFFER
     mov edx,16
 .find_file_write:
@@ -112,17 +118,22 @@ fs_write_file:
     push esi
     mov ecx,16
 .compare_write:
-    lodsb
+    mov al,[esi]
     cmp al,[edi]
     jne .not_match
+    cmp al,0
+    je .match_done
+    inc esi
     inc edi
-    loop .compare_write
+    dec ecx
+    jnz .compare_write
+.match_done:
     pop esi
     pop edi
     ; encontrado
     mov eax,[edi+16] ; LBA
     call floppy_write_sector
-    mov [edi+20], ecx ; Guarda el tamaño
+    mov [edi+20], ebp ; Guarda el tamaño
     call fs_save_dir
     ret
 .not_match:
@@ -144,11 +155,16 @@ fs_change_dir:
     push esi
     mov edx,16
 .compare_dir:
-    lodsb
+    mov al,[esi]
     cmp al,[edi]
     jne .skip_compare
+    cmp al,0
+    je .dir_match
+    inc esi
     inc edi
-    loop .compare_dir
+    dec edx
+    jnz .compare_dir
+.dir_match:
     pop esi
     pop edi
     ; validar flag

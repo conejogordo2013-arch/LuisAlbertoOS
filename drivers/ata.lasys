@@ -7,8 +7,27 @@
 
 global floppy_read_sector
 global floppy_write_sector
+global floppy_probe
 
 msg_floppy_err db "ATA read/write error", 0x0A, 0
+ata_present dd 0
+
+floppy_probe:
+    push edx
+    mov edx, 0x1F7
+    in al, dx
+    cmp al, 0xFF
+    jne .present
+    mov dword [ata_present], 0
+    xor eax, eax
+    pop edx
+    ret
+.present:
+    mov dword [ata_present], 1
+    mov eax, 1
+    pop edx
+    ret
+
 
 ; Input: EAX = LBA Sector, EBX = Memory Buffer
 floppy_read_sector:

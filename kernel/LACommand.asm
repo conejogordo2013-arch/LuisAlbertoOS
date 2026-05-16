@@ -57,7 +57,7 @@ msg_edit_info     db 0x0A,"--- EDITOR (ESC para guardar y salir) ---",0x0A,0
 msg_saved         db 0x0A,"Archivo guardado.",0
 msg_dir_header    db 0x0A,"-- DIRECTORIO ACTUAL --",0x0A,0
 msg_dir_type      db " <DIR>",0
-msg_audio     db 0x0A,"Comando no inplementado",0
+msg_audio     db 0x0A,"Comando no implementado.",0
 msg_err_img       db 0x0A,"Error: Archivo de imagen no encontrado o vacio.",0
 msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "dir    - Lista directorio",0x0A, \
@@ -86,6 +86,8 @@ msg_net_listen    db 0x0A,"Escuchando paquetes (ESC para salir)...",0
 msg_net_send_err  db 0x0A,"Error: Formato Hexadecimal Invalido.",0
 msg_net_send_ok   db 0x0A,"Paquete enviado correctamente.",0
 msg_net_timeout   db 0x0A,"Tiempo de espera agotado.",0
+msg_fs_unavail    db 0x0A,"Error: almacenamiento ATA no disponible.",0
+msg_net_unavail   db 0x0A,"Error: red RTL8139 no disponible.",0
 msg_net_len       db 0x0A,"LEN: ",0
 msg_net_hex       db 0x0A,"HEX:",0x0A,0
 msg_net_ascii     db 0x0A,"ASCII:",0x0A,0
@@ -147,6 +149,7 @@ handle_backspace:
     dec edi
     mov byte [edi], 0
     dec ecx
+    call api_backspace
     jmp read_key
 
 parse_command:
@@ -234,6 +237,8 @@ do_clear:
     jmp shell_loop
 
 do_dir:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
     mov esi, msg_dir_header
     call api_print_string
     mov esi, DIR_BUFFER  
@@ -267,8 +272,9 @@ do_dir:
     dec ecx
     jnz .dir_loop
     jmp shell_loop
-
 do_mkdir:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
     mov esi, [arg_ptr]
     cmp esi, 0
     je shell_loop
@@ -279,6 +285,8 @@ do_mkdir:
     jmp shell_loop
 
 do_touch:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
     mov esi, [arg_ptr]
     cmp esi, 0
     je shell_loop
@@ -289,6 +297,8 @@ do_touch:
     jmp shell_loop
 
 do_cd:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
     mov esi, [arg_ptr]
     cmp esi, 0
     je shell_loop
@@ -296,6 +306,8 @@ do_cd:
     jmp shell_loop
 
 do_edit:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
     mov esi, [arg_ptr]
     cmp esi, 0
     je shell_loop
@@ -347,6 +359,8 @@ do_audio:
     jmp shell_loop
 
 do_img:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
     mov esi, [arg_ptr]
     cmp byte [esi], 0
     je .no_arg
@@ -366,6 +380,11 @@ do_img:
     call api_print_string
     jmp shell_loop
 
+fs_missing_cmd:
+    mov esi, msg_fs_unavail
+    call api_print_string
+    jmp shell_loop
+
 do_help:
     mov esi, msg_help
     call api_print_string
@@ -376,6 +395,8 @@ do_help:
 ; ==================================================================
 
 do_net:
+    cmp dword [net_driver_available], 0
+    je .net_missing
     mov esi, [arg_ptr]
     cmp esi, 0
     je .show_usage
@@ -448,6 +469,11 @@ do_net:
     call strcmp
     cmp eax, 0
     je net_cmd_scan
+
+.net_missing:
+    mov esi, msg_net_unavail
+    call api_print_string
+    jmp shell_loop
 
 .show_usage:
     mov esi, msg_net_usage
