@@ -1,0 +1,188 @@
+; ==================================================================
+; rtl8139.lasys - Driver Realtek RTL8139 (Polling)
+; ==================================================================
+
+%ifndef RTL8139_LASYS
+%define RTL8139_LASYS
+
+; =========================
+; CONFIGURACIÓN BASE
+; =========================
+RTL8139_IO_BASE equ 0xC000
+
+; =========================
+; REGISTROS RTL8139
+; =========================
+RTL_MAC0       equ 0x00
+RTL_TSAD0      equ 0x20
+RTL_TSD0       equ 0x10
+RTL_RBSTART    equ 0x30
+RTL_CMD        equ 0x37
+RTL_CAPR       equ 0x38
+RTL_IMR        equ 0x3C
+RTL_ISR        equ 0x3E
+RTL_TCR        equ 0x40
+RTL_RCR        equ 0x44
+RTL_CONFIG1    equ 0x52
+
+; =========================
+; BUFFERS
+; =========================
+RTL8139_RX_BUF equ 0x80000     ; 8KB RX buffer
+RTL8139_TX_BUF equ 0x90000     ; TX buffer
+
+; =========================
+; VARIABLES
+; =========================
+rtl_rx_offset  dd 0
+rtl_tx_id      db 0
+
+; =========================
+; FLAGS
+; =========================
+%define RTL_RCR_FLAGS (0x0F | 0x80)
+
+; =========================
+; MACROS I/O
+; =========================
+%macro OUTB 2
+    mov dx, %1
+    mov al, %2
+    out dx, al
+%endmacro
+
+%macro OUTW 2
+    mov dx, %1
+    mov ax, %2
+    out dx, ax
+%endmacro
+
+%macro OUTD 2
+    mov dx, %1
+    mov eax, %2
+    out dx, eax
+%endmacro
+
+%macro INB 1
+    mov dx, %1
+    in al, dx
+%endmacro
+
+; ==================================================================
+; INICIALIZACIÓN
+; ==================================================================
+rtl8139_init:
+    pusha
+
+    ; Encender dispositivo
+    OUTB (RTL8139_IO_BASE + RTL_CONFIG1), 0x00
+
+    ; Software reset
+    OUTB (RTL8139_IO_BASE + RTL_CMD), 0x10
+.wait_reset:
+    INB (RTL8139_IO_BASE + RTL_CMD)
+    test al, 0x10
+    jnz .wait_reset
+
+    ; RX buffer
+    OUTD (RTL8139_IO_BASE + RTL_RBSTART), RTL8139_RX_BUF
+
+    ; Interrupciones (ROK + TOK)
+    OUTW (RTL8139_IO_BASE + RTL_IMR), 0x0005
+
+    ; Config RX
+    OUTD (RTL8139_IO_BASE + RTL_RCR), RTL_RCR_FLAGS
+
+    ; Habilitar RX + TX
+    OUTB (RTL8139_IO_BASE + RTL_CMD), 0x0C
+
+    mov dword [rtl_rx_offset], 0
+    mov byte  [rtl_tx_id], 0
+
+    popa
+    ret
+
+; ==================================================================
+; TRANSMISIÓN
+; ECX = longitud
+; datos en RTL8139_TX_BUF
+; ==================================================================
+rtl8139_transmit:
+    pusha
+
+    xor eax, eax
+    mov al, [rtl_tx_id]
+    shl eax, 2
+
+    ; TSAD
+    mov edx, RTL8139_IO_BASE + RTL_TSAD0
+    add edx, eax
+    mov eax, RTL8139_TX_BUF
+    out dx, eax
+
+    ; TSD
+    mov edx, RTL8139_IO_BASE + RTL_TSD0
+    xor eax, eax
+    mov al, [rtl_tx_id]
+    shl eax, 2
+    add edx, eax
+    mov eax, ecx
+    out dx, eax
+
+    ; rotar descriptor
+    mov al, [rtl_tx_id]
+    inc al
+    and al, 3
+    mov [rtl_tx_id], al
+
+    popa
+    ret
+
+; ==================================================================
+; RECEPCIÓN
+; salida: ECX = tamaño (0 si no hay paquete)
+; ==================================================================
+rtl8139_receive:
+    pusha
+
+    ; buffer vacío?
+    INB (RTL8139_IO_BASE + RTL_CMD)
+    test al, 0x01
+    jnz .no_packet
+
+    ; offset actual
+    mov esi, RTL8139_RX_BUF
+    add esi, [rtl_rx_offset]
+
+    ; longitud paquete
+    movzx ecx, word [esi+2]
+
+    ; calcular nuevo offset
+    mov eax, [rtl_rx_offset]
+    add eax, ecx
+    add eax, 4      ; header
+    add eax, 3
+    and eax, ~3
+
+    ; wrap 8KB
+    cmp eax, 8192
+    jl .no_wrap
+    sub eax, 8192
+.no_wrap:
+
+    mov [rtl_rx_offset], eax
+
+    ; actualizar CAPR
+    sub eax, 16
+    mov dx, RTL8139_IO_BASE + RTL_CAPR
+    out dx, ax
+
+    popa
+    ret
+
+.no_packet:
+    popa
+    xor ecx, ecx
+    ret
+
+%endif

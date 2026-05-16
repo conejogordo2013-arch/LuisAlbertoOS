@@ -1,0 +1,47 @@
+; ==================================================================  
+; net.lasys - Funciones de pila TCP/IP Mínima
+; ==================================================================  
+
+%ifndef NET_LASYS
+%define NET_LASYS
+
+; Macros para offsets de Ethernet Frame
+ETHER_MAC_DEST equ 0  ; 6 bytes
+ETHER_MAC_SRC  equ 6  ; 6 bytes
+ETHER_TYPE     equ 12 ; 2 bytes
+
+; Tipos de EtherType comunes
+ETH_TYPE_IP4   equ 0x0800
+ETH_TYPE_ARP   equ 0x0806
+
+; Macros para offsets IPv4
+IP_VERSION_IHL equ 14 ; 1 byte
+IP_TOS         equ 15 ; 1 byte
+IP_TOTAL_LEN   equ 16 ; 2 bytes
+IP_PROTOCOL    equ 23 ; 1 byte (0x11 = UDP, 0x06 = TCP, 0x01 = ICMP)
+IP_SRC_ADDR    equ 26 ; 4 bytes
+IP_DST_ADDR    equ 30 ; 4 bytes
+
+; Macro para extraer el EtherType
+; Entrada: ESI apuntando al buffer del paquete
+; Salida: AX = EtherType (Big Endian -> Little Endian swapeado)
+net_get_ethertype:
+    mov ax, word [esi + ETHER_TYPE]
+    xchg ah, al          ; Swap para formato Little Endian de x86
+    ret
+
+; Analizador básico de capa IP
+; Entrada: ESI apuntando al buffer
+; Salida: AL = Protocolo (UDP/TCP), EAX=0 si no es IPv4
+net_parse_ipv4:
+    call net_get_ethertype
+    cmp ax, ETH_TYPE_IP4
+    jne .not_ip
+    
+    mov al, byte [esi + IP_PROTOCOL]
+    ret
+.not_ip:
+    xor eax, eax
+    ret
+
+%endif
