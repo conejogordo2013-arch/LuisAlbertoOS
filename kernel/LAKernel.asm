@@ -55,3 +55,8 @@ gdt_descriptor:
 %include "drivers/vga_image.lasys"
 %include "drivers/rtl8139.lasys"   ; <--- Añadir Driver de Red
 %include "kernel/net.lasys"        ; <--- Añadir Pila de Red
+%include "drivers/ac97.lasys"
+
+%include "kernel/interrupts.lasys"
+
+%include "kernel/memory.lasys"

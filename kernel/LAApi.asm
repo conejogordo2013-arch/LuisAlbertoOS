@@ -47,6 +47,31 @@ api_print_string:
     popa
     ret
 
+
+api_backspace:
+    pusha
+    cmp dword [cursor_x], 0
+    jne .dec_x
+    cmp dword [cursor_y], 0
+    je .done
+    dec dword [cursor_y]
+    mov dword [cursor_x], 79
+    jmp .erase
+.dec_x:
+    dec dword [cursor_x]
+.erase:
+    mov eax, [cursor_y]
+    imul eax, 80
+    add eax, [cursor_x]
+    imul eax, 2
+    mov ebx, 0xB8000
+    add ebx, eax
+    mov byte [ebx], 0x20
+    mov byte [ebx + 1], 0x0F
+.done:
+    popa
+    ret
+
 api_delay:
     push ecx
     mov ecx, 0xFFFFF    ; Simple busy-wait loop

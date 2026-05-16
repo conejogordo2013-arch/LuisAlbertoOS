@@ -44,4 +44,52 @@ net_parse_ipv4:
     xor eax, eax
     ret
 
+
+
+net_local_mac db 0x52,0x54,0x00,0x12,0x34,0x56
+net_local_ip  db 192,168,1,100
+net_gw_ip     db 192,168,1,1
+net_bcast_mac db 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
+
+; Construye ARP request en RTL8139_TX_BUF. salida ECX=len
+net_build_arp_request:
+    mov edi, RTL8139_TX_BUF
+    ; dst mac broadcast
+    mov esi, net_bcast_mac
+    mov ecx, 6
+    rep movsb
+    ; src mac
+    mov esi, net_local_mac
+    mov ecx, 6
+    rep movsb
+    ; ethertype arp 0x0806
+    mov byte [edi], 0x08
+    mov byte [edi+1], 0x06
+    add edi, 2
+    ; htype, ptype, hlen, plen, op
+    mov word [edi], 0x0100
+    mov word [edi+2], 0x0008
+    mov byte [edi+4], 6
+    mov byte [edi+5], 4
+    mov word [edi+6], 0x0100
+    ; sha
+    mov esi, net_local_mac
+    lea edi, [edi+8]
+    mov ecx, 6
+    rep movsb
+    ; spa
+    mov esi, net_local_ip
+    mov ecx, 4
+    rep movsb
+    ; tha zeros
+    xor eax, eax
+    stosd
+    stosw
+    ; tpa (gateway)
+    mov esi, net_gw_ip
+    mov ecx, 4
+    rep movsb
+    mov ecx, 42
+    ret
+
 %endif
