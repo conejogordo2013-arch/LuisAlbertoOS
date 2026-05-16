@@ -35,6 +35,14 @@ cmd_audio     db "audio",0
 cmd_img       db "img",0
 cmd_help      db "help",0
 cmd_net       db "net",0
+cmd_devices   db "devices",0
+cmd_beep      db "beep",0
+cmd_pwd       db "pwd",0
+cmd_meminfo   db "meminfo",0
+cmd_alloc     db "alloc",0
+cmd_free      db "free",0
+cmd_rm        db "rm",0
+cmd_cat       db "cat",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -48,6 +56,8 @@ net_sub_stats     db "stats",0
 net_sub_config    db "config",0
 net_sub_ping      db "ping",0
 net_sub_scan      db "scan",0
+net_sub_arp       db "arp",0
+net_sub_reset     db "reset",0
 
 ; Mensajes Básicos
 msg_err_cmd       db 0x0A,"Error: comando no reconocido.",0
@@ -69,10 +79,18 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "audio  - Reproducir WAV No implementado Aun",0x0A, \
                 "img    - Visualizador de imagen",0x0A, \
                 "net    - Subsistema de red (net help)",0x0A, \
-                "help   - Muestra esta ayuda",0
+                "help   - Muestra esta ayuda",0x0A, \
+                "devices- Estado de drivers",0x0A, \
+                "beep   - Prueba audio AC97",0x0A, \
+                "pwd    - Muestra ruta actual",0x0A, \
+                "meminfo- Estado memoria",0x0A, \
+                "alloc  - Reserva 4KB",0x0A, \
+                "free   - Libera ultimo frame",0x0A, \
+                "rm     - Elimina entrada",0x0A, \
+                "cat    - Muestra archivo",0
 
 ; Mensajes de Red
-msg_net_usage     db 0x0A,"Uso: net <comando> [args]",0x0A,"Comandos: info, up, down, send, recv, listen, dump, stats, config, ping, scan",0
+msg_net_usage     db 0x0A,"Uso: net <comando> [args]",0x0A,"Comandos: info, up, down, send, recv, listen, dump, stats, config, ping, scan, arp, reset",0
 msg_net_up        db 0x0A,"Red inicializada (RTL8139 UP). RX/TX habilitados.",0
 msg_net_down      db 0x0A,"Red deshabilitada (RTL8139 DOWN).",0
 msg_net_info      db 0x0A,"Dispositivo: RTL8139",0x0A,"Estado: UP",0x0A,"MAC: Cargada",0
@@ -86,8 +104,34 @@ msg_net_listen    db 0x0A,"Escuchando paquetes (ESC para salir)...",0
 msg_net_send_err  db 0x0A,"Error: Formato Hexadecimal Invalido.",0
 msg_net_send_ok   db 0x0A,"Paquete enviado correctamente.",0
 msg_net_timeout   db 0x0A,"Tiempo de espera agotado.",0
+msg_net_arp_tx    db 0x0A,"ARP request enviado (gateway).",0
+msg_net_reset_ok  db 0x0A,"Driver de red reiniciado.",0
 msg_fs_unavail    db 0x0A,"Error: almacenamiento ATA no disponible.",0
 msg_net_unavail   db 0x0A,"Error: red RTL8139 no disponible.",0
+msg_audio_unavail db 0x0A,"Error: audio AC97 no disponible.",0
+msg_dev_status    db 0x0A,"Estado dispositivos:",0x0A,0
+msg_dev_fs        db "ATA: ",0
+msg_dev_net       db 0x0A,"RTL8139: ",0
+msg_dev_audio     db 0x0A,"AC97: ",0
+msg_dev_ok        db "OK",0
+msg_dev_missing   db "NO DETECTADO",0
+msg_mem_hdr       db 0x0A,"Memoria kernel:",0x0A,0
+msg_mem_total     db "Total bytes: ",0
+msg_mem_used      db 0x0A,"Usado bytes: ",0
+msg_mem_free      db 0x0A,"Libre bytes: ",0
+msg_int_state     db 0x0A,"Interrupciones: ",0
+msg_pg_state      db 0x0A,"Paging: ",0
+msg_alloc_ok      db 0x0A,"Heap alloc ok @0x",0
+msg_alloc_fail    db 0x0A,"Alloc fallo.",0
+msg_frame_ok      db 0x0A,"Frame alloc ok @0x",0
+msg_frame_fail    db 0x0A,"Frame alloc fallo.",0
+msg_frame_free_ok db 0x0A,"Ultimo frame liberado.",0
+msg_frame_free_no db 0x0A,"No hay frame para liberar.",0
+msg_num_nl        db 0x0A,0
+msg_rm_ok         db 0x0A,"Entrada eliminada.",0
+msg_rm_fail       db 0x0A,"No se pudo eliminar (no existe).",0
+msg_cat_hdr       db 0x0A,"Contenido:",0x0A,0
+msg_cat_fail      db 0x0A,"No se pudo leer archivo.",0
 msg_net_len       db 0x0A,"LEN: ",0
 msg_net_hex       db 0x0A,"HEX:",0x0A,0
 msg_net_ascii     db 0x0A,"ASCII:",0x0A,0
@@ -218,6 +262,46 @@ execute:
     call strcmp
     cmp eax, 0
     je do_help
+
+    mov edi, cmd_devices
+    call strcmp
+    cmp eax, 0
+    je do_devices
+
+    mov edi, cmd_beep
+    call strcmp
+    cmp eax, 0
+    je do_beep
+
+    mov edi, cmd_pwd
+    call strcmp
+    cmp eax, 0
+    je do_pwd
+
+    mov edi, cmd_meminfo
+    call strcmp
+    cmp eax, 0
+    je do_meminfo
+
+    mov edi, cmd_alloc
+    call strcmp
+    cmp eax, 0
+    je do_alloc
+
+    mov edi, cmd_free
+    call strcmp
+    cmp eax, 0
+    je do_free
+
+    mov edi, cmd_rm
+    call strcmp
+    cmp eax, 0
+    je do_rm
+
+    mov edi, cmd_cat
+    call strcmp
+    cmp eax, 0
+    je do_cat
 
     ; --- INTEGRACIÓN DEL SUBSISTEMA DE RED ---
     mov edi, cmd_net
@@ -385,6 +469,164 @@ fs_missing_cmd:
     call api_print_string
     jmp shell_loop
 
+
+do_pwd:
+    mov esi, msg_newline
+    call api_print_string
+    mov esi, current_path
+    call api_print_string
+    jmp shell_loop
+
+do_devices:
+    mov esi, msg_dev_status
+    call api_print_string
+    mov esi, msg_dev_fs
+    call api_print_string
+    cmp dword [fs_driver_available], 0
+    je .fs_no
+    mov esi, msg_dev_ok
+    jmp .fs_out
+.fs_no:
+    mov esi, msg_dev_missing
+.fs_out:
+    call api_print_string
+
+    mov esi, msg_dev_net
+    call api_print_string
+    cmp dword [net_driver_available], 0
+    je .net_no
+    mov esi, msg_dev_ok
+    jmp .net_out
+.net_no:
+    mov esi, msg_dev_missing
+.net_out:
+    call api_print_string
+
+    mov esi, msg_dev_audio
+    call api_print_string
+    cmp dword [audio_driver_available], 0
+    je .aud_no
+    mov esi, msg_dev_ok
+    jmp .aud_out
+.aud_no:
+    mov esi, msg_dev_missing
+.aud_out:
+    call api_print_string
+    jmp shell_loop
+
+do_beep:
+    cmp dword [audio_driver_available], 0
+    je .beep_no
+    call ac97_beep
+    jmp shell_loop
+.beep_no:
+    mov esi, msg_audio_unavail
+    call api_print_string
+    jmp shell_loop
+
+
+do_meminfo:
+    mov esi, msg_mem_hdr
+    call api_print_string
+    mov esi, msg_mem_total
+    call api_print_string
+    mov eax, [mem_total_bytes]
+    call print_hex32
+    mov esi, msg_mem_used
+    call api_print_string
+    mov eax, [mem_used_bytes]
+    call print_hex32
+    mov esi, msg_mem_free
+    call api_print_string
+    mov eax, [mem_total_bytes]
+    sub eax, [mem_used_bytes]
+    call print_hex32
+    mov esi, msg_int_state
+    call api_print_string
+    mov eax, [interrupts_ready]
+    call print_hex32
+    mov esi, msg_pg_state
+    call api_print_string
+    mov eax, [paging_enabled]
+    call print_hex32
+    jmp shell_loop
+
+do_alloc:
+    mov ecx, 4096
+    call kmalloc
+    cmp eax, 0
+    je .alloc_fail
+    mov esi, msg_alloc_ok
+    call api_print_string
+    call print_hex32
+    call frame_alloc
+    cmp eax, 0
+    je .frame_fail
+    mov esi, msg_frame_ok
+    call api_print_string
+    call print_hex32
+    jmp shell_loop
+.alloc_fail:
+    mov esi, msg_alloc_fail
+    call api_print_string
+    jmp shell_loop
+.frame_fail:
+    mov esi, msg_frame_fail
+    call api_print_string
+    jmp shell_loop
+
+do_free:
+    mov eax, [last_frame_alloc]
+    cmp eax, 0
+    je .free_none
+    call frame_free
+    mov dword [last_frame_alloc], 0
+    mov esi, msg_frame_free_ok
+    call api_print_string
+    jmp shell_loop
+.free_none:
+    mov esi, msg_frame_free_no
+    call api_print_string
+    jmp shell_loop
+
+
+do_rm:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je shell_loop
+    call fs_delete_entry
+    cmp eax, 0
+    je .rm_fail
+    mov esi, msg_rm_ok
+    call api_print_string
+    jmp shell_loop
+.rm_fail:
+    mov esi, msg_rm_fail
+    call api_print_string
+    jmp shell_loop
+
+do_cat:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je shell_loop
+    call fs_read_file
+    cmp eax, 0
+    je .cat_fail
+    mov byte [APP_POINTER+511], 0
+    mov esi, msg_cat_hdr
+    call api_print_string
+    mov esi, APP_POINTER
+    call api_print_string
+    jmp shell_loop
+.cat_fail:
+    mov esi, msg_cat_fail
+    call api_print_string
+    jmp shell_loop
+
 do_help:
     mov esi, msg_help
     call api_print_string
@@ -469,6 +711,16 @@ do_net:
     call strcmp
     cmp eax, 0
     je net_cmd_scan
+
+    mov edi, net_sub_arp
+    call strcmp
+    cmp eax, 0
+    je net_cmd_arp
+
+    mov edi, net_sub_reset
+    call strcmp
+    cmp eax, 0
+    je net_cmd_reset
 
 .net_missing:
     mov esi, msg_net_unavail
@@ -575,10 +827,16 @@ net_cmd_dump:
 net_cmd_stats:
     mov esi, msg_net_stats
     call api_print_string
+    mov eax, [net_pkts_sent]
+    call print_hex32
     mov esi, msg_net_recv_msg
     call api_print_string
+    mov eax, [net_pkts_recv]
+    call print_hex32
     mov esi, msg_net_err
     call api_print_string
+    mov eax, [net_errors]
+    call print_hex32
     jmp shell_loop
 
 net_cmd_config:
@@ -592,6 +850,21 @@ net_cmd_ping:
     call api_print_string
     inc dword [net_pkts_sent]
     inc dword [net_pkts_recv]
+    jmp shell_loop
+
+
+net_cmd_arp:
+    call net_build_arp_request
+    call rtl8139_transmit
+    inc dword [net_pkts_sent]
+    mov esi, msg_net_arp_tx
+    call api_print_string
+    jmp shell_loop
+
+net_cmd_reset:
+    call rtl8139_init
+    mov esi, msg_net_reset_ok
+    call api_print_string
     jmp shell_loop
 
 net_cmd_scan:
@@ -611,6 +884,32 @@ print_char:
     mov byte [cmd_buffer+60], al
     mov byte [cmd_buffer+61], 0
     mov esi, cmd_buffer+60
+    call api_print_string
+    popa
+    ret
+
+print_hex32:
+    pusha
+    mov edi, cmd_buffer+40
+    mov ecx, 8
+.hex_loop:
+    rol eax, 4
+    mov bl, al
+    and bl, 0x0F
+    cmp bl, 9
+    jle .digit
+    add bl, 55
+    jmp .store
+.digit:
+    add bl, 48
+.store:
+    mov [edi], bl
+    inc edi
+    loop .hex_loop
+    mov byte [edi], 0
+    mov esi, cmd_buffer+40
+    call api_print_string
+    mov esi, msg_num_nl
     call api_print_string
     popa
     ret

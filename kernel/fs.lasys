@@ -30,6 +30,7 @@ fs_save_dir:
     ret
 
 fs_create_file:
+    mov ah, al
     mov edi, DIR_BUFFER
     mov ecx, 16
 .find_empty:
@@ -62,7 +63,7 @@ fs_create_file:
     add eax, DATA_LBA
     mov [edi+16], eax   ; LBA
     mov dword [edi+20], 0 ; tamaño
-    mov byte [edi+24], FLAG_FILE ; flag
+    mov byte [edi+24], ah ; flag
     call fs_save_dir
     ret
 
@@ -218,4 +219,45 @@ fs_change_dir:
     jnz .find_dir
 .not_found:
     ret
+
+
+fs_delete_entry:
+    ; ESI = nombre
+    mov edi, DIR_BUFFER
+    mov ecx,16
+.find_del:
+    cmp byte [edi],0
+    je .next
+    push edi
+    push esi
+    mov edx,16
+.compare:
+    mov al,[esi]
+    cmp al,[edi]
+    jne .no
+    cmp al,0
+    je .match
+    inc esi
+    inc edi
+    dec edx
+    jnz .compare
+.match:
+    pop esi
+    pop edi
+    mov ecx,24
+    xor eax,eax
+    rep stosb
+    call fs_save_dir
+    mov eax,1
+    ret
+.no:
+    pop esi
+    pop edi
+.next:
+    add edi,24
+    dec ecx
+    jnz .find_del
+    xor eax,eax
+    ret
+
 %endif

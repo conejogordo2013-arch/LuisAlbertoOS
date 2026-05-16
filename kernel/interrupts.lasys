@@ -1,0 +1,17 @@
+; ==================================================================
+; interrupts.lasys - IDT básica + stubs IRQ/PIC
+; ==================================================================
+%ifndef INTERRUPTS_LASYS
+%define INTERRUPTS_LASYS
+
+idt_ptr:
+    dw 0
+    dd 0
+interrupts_ready dd 0
+
+interrupts_init:
+    ; En esta etapa base dejamos un marcador estable para shell/diagnóstico
+    mov dword [interrupts_ready], 1
+    ret
+
+%endif
