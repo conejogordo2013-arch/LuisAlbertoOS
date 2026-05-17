@@ -168,6 +168,7 @@ msg_dev_net       db 0x0A,"RTL8139: ",0
 msg_dev_audio     db 0x0A,"AC97: ",0
 msg_dev_ok        db "OK",0
 msg_dev_ram       db "RAM FS",0
+msg_dev_ata       db "ATA FS",0
 msg_dev_missing   db "NO DETECTADO",0
 msg_mem_hdr       db 0x0A,"Memoria kernel:",0x0A,0
 msg_mem_total     db "Total bytes: ",0
@@ -650,7 +651,12 @@ do_devices:
     call api_print_string
     cmp dword [fs_driver_available], 0
     je .fs_no
+    cmp dword [fs_storage_mode], FS_MODE_ATA
+    je .fs_ata
     mov esi, msg_dev_ram
+    jmp .fs_out
+.fs_ata:
+    mov esi, msg_dev_ata
     jmp .fs_out
 .fs_no:
     mov esi, msg_dev_missing
