@@ -10,6 +10,8 @@ FRAME_BITMAP_BYTES   equ TOTAL_FRAMES/8
 FRAME_BITMAP         equ 0xA000          ; zona baja libre para bitmap
 KHEAP_START          equ 0x100000
 KHEAP_SIZE           equ 0x20000         ; 128KB
+RESERVED_FRAMES      equ (KHEAP_START + KHEAP_SIZE) / PAGE_SIZE
+RESERVED_BITMAP_BYTES equ RESERVED_FRAMES / 8
 PAGE_DIR_BASE        equ 0xB000
 PAGE_TABLE0_BASE     equ 0xC000
 
@@ -27,7 +29,13 @@ mem_init:
     mov ecx, FRAME_BITMAP_BYTES
     xor eax, eax
     rep stosb
-    mov dword [mem_used_bytes], 0
+    ; Reserve low memory, kernel structures, stack/video area and kernel heap
+    ; so frame_alloc never returns address 0 or overlaps live OS memory.
+    mov edi, FRAME_BITMAP
+    mov ecx, RESERVED_BITMAP_BYTES
+    mov al, 0xFF
+    rep stosb
+    mov dword [mem_used_bytes], RESERVED_FRAMES * PAGE_SIZE
     mov dword [heap_ptr], KHEAP_START
     mov dword [last_frame_alloc], 0
     popa
