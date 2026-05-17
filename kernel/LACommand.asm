@@ -188,7 +188,7 @@ msg_vmmap_ok      db 0x0A,"vm map ok",0
 msg_vmmap_fail    db 0x0A,"vm map fail",0
 msg_vmunmap_ok    db 0x0A,"vm unmap ok",0
 msg_vmunmap_fail  db 0x0A,"vm unmap fail",0
-msg_ring3_info    db 0x0A,"Saltando a user stub ring3...",0
+msg_ring3_info    db 0x0A,"Ring3 experimental deshabilitado: requiere TSS/iret completo.",0
 msg_sw_from       db 0x0A,"Last from: ",0
 msg_sw_to         db 0x0A,"Last to: ",0
 msg_sched_on      db 0x0A,"Scheduler: ",0
@@ -214,6 +214,8 @@ shell_start:
     mov esi, path_root_init
     mov edi, current_path
     call strcpy
+    cmp dword [fs_driver_available], 0
+    je skip_init
     call fs_init
 skip_init:
     mov esi, msg_welcome
@@ -556,9 +558,9 @@ do_edit:
     jmp .edit_loop
 .save_file:
     mov byte [edi], 0
-    mov esi, [arg_ptr]     
-    mov ebx, BUFFER_EDITOR 
-    mov ecx, 512           
+    inc ecx                ; include null terminator in stored size
+    mov esi, [arg_ptr]
+    mov ebx, BUFFER_EDITOR
     call fs_write_file
     mov esi, msg_saved
     call api_print_string
@@ -573,6 +575,8 @@ do_img:
     cmp dword [fs_driver_available], 0
     je fs_missing_cmd
     mov esi, [arg_ptr]
+    cmp esi, 0
+    je .no_arg
     cmp byte [esi], 0
     je .no_arg
     call fs_read_file
@@ -920,22 +924,10 @@ do_vmunmap:
     jmp shell_loop
 
 do_ring3:
+    ; Optional/experimental until a TSS and safe user-mode return frame are installed.
     mov esi, msg_ring3_info
     call api_print_string
-    ; construir iret frame a CPL3
-    cli
-    mov ax, 0x23
-    mov ds, ax
-    mov es, ax
-    push dword 0x23
-    push dword 0x8D000
-    pushfd
-    pop eax
-    or eax, 0x200
-    push eax
-    push dword 0x1B
-    push dword user_entry_stub
-    iretd
+    jmp shell_loop
 
 do_help:
     mov esi, msg_help
@@ -947,6 +939,7 @@ do_help:
 ; ==================================================================
 
 do_net:
+    mov dword [hex_arg_ptr], 0
     cmp dword [net_driver_available], 0
     je .net_missing
     mov esi, [arg_ptr]

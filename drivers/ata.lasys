@@ -61,12 +61,18 @@ floppy_read_sector:
     mov al, 0x20
     out dx, al
 
+    mov ecx, 0x100000
 .wait:
     in al, dx
+    test al, 0x80           ; Wait while BSY
+    jnz .wait_next
     test al, 1              ; Check ERR bit
     jnz .error
     test al, 8              ; Check DRQ bit (Ready to transfer)
-    jz .wait
+    jnz .read
+.wait_next:
+    loop .wait
+    jmp .error
 
 .read:
     mov edx, 0x1F0
@@ -110,14 +116,18 @@ floppy_write_sector:
     mov al, 0x30
     out dx, al
 
+    mov ecx, 0x100000
 .wait:
     in al, dx
-    test al, 0x80       ; ← también te faltaba BSY aquí
-    jnz .wait
+    test al, 0x80
+    jnz .wait_next
     test al, 1
     jnz .error
     test al, 8
-    jz .wait
+    jnz .write
+.wait_next:
+    loop .wait
+    jmp .error
 
 .write:
     mov edx, 0x1F0
@@ -127,19 +137,25 @@ floppy_write_sector:
     
     ; --- NUEVO: Esperar a que el disco procese los datos ---
     mov edx, 0x1F7
+    mov ecx, 0x100000
 .wait_write_finish:
     in al, dx
     test al, 0x80       ; Comprobar BSY (Busy)
-    jnz .wait_write_finish
-    
-    ; --- NUEVO: Comando Flush Cache (0xE7) y esperar ---
+    jz .flush
+    loop .wait_write_finish
+    jmp .error
+.flush:
+    ; Flush Cache (0xE7) y esperar con timeout
     mov al, 0xE7
     out dx, al
+    mov ecx, 0x100000
 .wait_flush:
     in al, dx
     test al, 0x80       ; Comprobar BSY de nuevo
-    jnz .wait_flush
-    
+    jz .write_ok
+    loop .wait_flush
+    jmp .error
+.write_ok:
     popa
     ret
 
