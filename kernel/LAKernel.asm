@@ -17,6 +17,7 @@ kernel_entry:
 
 [BITS 32]
 kernel_32:
+    cld                     ; Ensure all string operations move forward
     ; Setup 32-bit segment registers
     mov ax, 0x10
     mov ds, ax

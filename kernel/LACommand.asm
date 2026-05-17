@@ -17,6 +17,9 @@ msg_welcome       db 0x0A,"LuisAlbertoOS Shell REAL v3.1 (Net Enabled)",0x0A,0
 msg_newline       db 0x0A,0
 
 cmd_buffer        times 64 db 0
+char_buffer       db 0,0
+hex_buffer        times 9 db 0
+entry_name_buffer times 17 db 0
 arg_ptr           dd 0
 
 current_path      times 128 db 0
@@ -227,6 +230,10 @@ shell_loop:
     mov esi, shell_prompt
     call api_print_string
 
+    mov edi, cmd_buffer
+    mov ecx, 64
+    xor eax, eax
+    rep stosb
     mov edi, cmd_buffer
     xor ecx, ecx
 read_key:
@@ -547,6 +554,7 @@ do_edit:
     dec edi
     mov byte [edi], 0
     dec ecx
+    call api_backspace
     jmp .edit_loop
 .save_file:
     mov byte [edi], 0
@@ -1252,7 +1260,7 @@ print_entry_name:
     ; ESI = entrada de directorio. Copia nombre de 16 bytes a un
     ; buffer terminado en cero para no imprimir LBA/tamaño como texto.
     pusha
-    mov edi, cmd_buffer+40
+    mov edi, entry_name_buffer
     mov ecx, 16
 .copy:
     lodsb
@@ -1267,23 +1275,23 @@ print_entry_name:
 .done_copy:
     mov byte [edi], 0
 .print:
-    mov esi, cmd_buffer+40
+    mov esi, entry_name_buffer
     call api_print_string
     popa
     ret
 
 print_char:
     pusha
-    mov byte [cmd_buffer+60], al
-    mov byte [cmd_buffer+61], 0
-    mov esi, cmd_buffer+60
+    mov [char_buffer], al
+    mov byte [char_buffer+1], 0
+    mov esi, char_buffer
     call api_print_string
     popa
     ret
 
 print_hex32:
     pusha
-    mov edi, cmd_buffer+40
+    mov edi, hex_buffer
     mov ecx, 8
 .hex_loop:
     rol eax, 4
@@ -1300,7 +1308,7 @@ print_hex32:
     inc edi
     loop .hex_loop
     mov byte [edi], 0
-    mov esi, cmd_buffer+40
+    mov esi, hex_buffer
     call api_print_string
     mov esi, msg_num_nl
     call api_print_string
