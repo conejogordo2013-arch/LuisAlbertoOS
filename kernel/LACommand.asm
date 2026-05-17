@@ -58,6 +58,7 @@ cmd_journal   db "journal",0
 cmd_tasks     db "tasks",0
 cmd_vmmap     db "vmmap",0
 cmd_vmunmap   db "vmunmap",0
+cmd_change    db "change",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -126,6 +127,10 @@ msg_net_up        db 0x0A,"Red inicializada (RTL8139 UP). RX/TX habilitados.",0
 msg_net_down      db 0x0A,"Red deshabilitada (RTL8139 DOWN).",0
 msg_net_info      db 0x0A,"Dispositivo: RTL8139",0x0A,"Estado: UP",0x0A,"MAC: Cargada",0
 msg_net_config    db 0x0A,"IP: 192.168.1.100",0x0A,"Mascara: 255.255.255.0",0x0A,"Gateway: 192.168.1.1",0
+msg_net_ip_lbl    db 0x0A,"IP: ",0
+msg_net_msk_lbl   db 0x0A,"Mascara: 255.255.255.0",0
+msg_net_gw_lbl    db 0x0A,"Gateway: ",0
+msg_net_dns_lbl   db 0x0A,"DNS: ",0
 msg_net_stats     db 0x0A,"-- Estadisticas de Red --",0x0A,"Enviados: ",0
 msg_net_recv_msg  db 0x0A,"Paquetes Recibidos: ",0
 msg_net_err       db 0x0A,"Errores: ",0
@@ -201,6 +206,13 @@ msg_vmmap_ok      db 0x0A,"vm map ok",0
 msg_vmmap_fail    db 0x0A,"vm map fail",0
 msg_vmunmap_ok    db 0x0A,"vm unmap ok",0
 msg_vmunmap_fail  db 0x0A,"vm unmap fail",0
+msg_change_usage  db 0x0A,"Uso: change <ram|ata>",0
+msg_change_ram_ok db 0x0A,"Cambiado a Ram Correctamente.",0
+msg_change_ata_ok db 0x0A,"Cambiado a ata Correctamente.",0
+msg_change_ata_no db 0x0A,"No se encontro disco.",0
+arg_ram           db "ram",0
+arg_ata           db "ata",0
+dot_char          db ".",0
 msg_sw_from       db 0x0A,"Last from: ",0
 msg_sw_to         db 0x0A,"Last to: ",0
 msg_sched_on      db 0x0A,"Scheduler: ",0
@@ -442,6 +454,11 @@ execute:
     call strcmp
     cmp eax, 0
     je do_vmunmap
+
+    mov edi, cmd_change
+    call strcmp
+    cmp eax, 0
+    je do_change
 
     ; --- INTEGRACIÓN DEL SUBSISTEMA DE RED ---
     mov edi, cmd_net
@@ -698,6 +715,42 @@ do_meminfo:
     call api_print_string
     mov eax, [paging_enabled]
     call print_hex32
+    jmp shell_loop
+
+do_change:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .usage
+    mov edi, arg_ram
+    call strcmp
+    cmp eax, 0
+    je .to_ram
+    mov esi, [arg_ptr]
+    mov edi, arg_ata
+    call strcmp
+    cmp eax, 0
+    je .to_ata
+.usage:
+    mov esi, msg_change_usage
+    call api_print_string
+    jmp shell_loop
+.to_ram:
+    call fs_init_ram
+    mov dword [fs_driver_available], 1
+    mov esi, msg_change_ram_ok
+    call api_print_string
+    jmp shell_loop
+.to_ata:
+    cmp dword [ata_present], 1
+    jne .ata_missing
+    call fs_init_ata
+    mov dword [fs_driver_available], 1
+    mov esi, msg_change_ata_ok
+    call api_print_string
+    jmp shell_loop
+.ata_missing:
+    mov esi, msg_change_ata_no
+    call api_print_string
     jmp shell_loop
 
 do_alloc:
@@ -1204,8 +1257,20 @@ net_cmd_stats:
     jmp shell_loop
 
 net_cmd_config:
-    mov esi, msg_net_config
+    mov esi, msg_net_ip_lbl
     call api_print_string
+    mov esi, net_local_ip
+    call print_ip4
+    mov esi, msg_net_msk_lbl
+    call api_print_string
+    mov esi, msg_net_gw_lbl
+    call api_print_string
+    mov esi, net_gw_ip
+    call print_ip4
+    mov esi, msg_net_dns_lbl
+    call api_print_string
+    mov esi, net_dns_ip
+    call print_ip4
     jmp shell_loop
 
 net_cmd_ping:
@@ -1473,6 +1538,56 @@ print_packet_dump:
     call api_print_string
     mov esi, msg_net_ascii
     call api_print_string
+    ret
+
+print_ip4:
+    pusha
+    mov edi, esi
+    mov ecx, 4
+.octet:
+    movzx eax, byte [edi]
+    call print_dec_u8
+    inc edi
+    dec ecx
+    jz .done
+    mov esi, dot_char
+    call api_print_string
+    jmp .octet
+.done:
+    mov esi, msg_num_nl
+    call api_print_string
+    popa
+    ret
+
+print_dec_u8:
+    pusha
+    xor esi, esi            ; printed flag
+    xor edx, edx
+    mov ebx, 100
+    div ebx
+    cmp eax, 0
+    je .skip_hundreds
+    add al, '0'
+    call print_char
+    mov esi, 1
+.skip_hundreds:
+    mov eax, edx
+    xor edx, edx
+    mov ebx, 10
+    div ebx
+    cmp eax, 0
+    jne .print_tens
+    cmp esi, 0
+    je .ones
+.print_tens:
+    add al, '0'
+    call print_char
+    mov esi, 1
+.ones:
+    add dl, '0'
+    mov al, dl
+    call print_char
+    popa
     ret
 task_demo_entry:
     mov esi, msg_newline
