@@ -54,6 +54,7 @@ net_parse_ipv4:
 net_local_mac db 0x52,0x54,0x00,0x12,0x34,0x56
 net_local_ip  db 192,168,1,100
 net_gw_ip     db 192,168,1,1
+net_dns_ip    db 8,8,8,8
 net_bcast_mac db 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
 
 ; Construye ARP request en RTL8139_TX_BUF. salida ECX=len
@@ -166,6 +167,14 @@ net_parse_l4:
     ret
 .udp:
     mov eax,3
+    ret
+
+
+net_build_dns_arp_request:
+    ; Real first step for DNS/paginf: resolve the gateway MAC via ARP.
+    ; A DNS UDP query must wait for this real ARP reply; the shell must not
+    ; invent an IP address when there is no reply.
+    call net_build_arp_request
     ret
 
 %endif

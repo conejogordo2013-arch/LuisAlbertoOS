@@ -1,17 +1,22 @@
 ; ------------------------------------------------------------------
 ; fs.lasys - Minimal Flat Filesystem REAL
 ; Directory LBA: 30. Máx 16 archivos
-; Entry: 16 bytes nombre, 4 bytes LBA, 4 bytes tamaño, 1 byte flags, 1 byte parent
+; Entry: 16 bytes nombre, 4 bytes LBA, 4 bytes tamaño, 1 byte flags, 1 byte parent (26 bytes)
 ; ------------------------------------------------------------------
 
 %ifndef FS_LASYS
 %define FS_LASYS
 
-DIR_LBA     equ 30
-DATA_LBA    equ 31
+DIR_LBA     equ 96
+DATA_LBA    equ 97
 DIR_BUFFER  equ 0x5000  ; Directorio en memoria
 FILE_BUFFER equ 0x6000  ; Buffer I/O
 APP_POINTER equ 0x7000  ; Puntero a app cargada
+RAMFS_DATA  equ 0xD000  ; 16 sectores RAM para fallback sin ATA
+DIR_ENTRY_SIZE equ 26
+FS_MODE_NONE equ 0
+FS_MODE_ATA  equ 1
+FS_MODE_RAM  equ 2
 
 ; FLAGS
 FLAG_FILE   equ 1
@@ -19,29 +24,95 @@ FLAG_DIR    equ 2
 ROOT_PARENT equ 0xFF
 
 fs_init:
+    ; The boot image is a floppy image, not an ATA disk.  Always start with
+    ; the RAM filesystem so the shell has reliable file commands on every
+    ; emulator/machine.  ATA remains an optional backend for future mounting,
+    ; but it is never required for boot or the terminal.
+    call fs_init_ram
+    ret
+
+fs_init_ata:
+    cmp dword [ata_present], 1
+    jne fs_init
+    mov dword [fs_storage_mode], FS_MODE_ATA
     mov eax, DIR_LBA
     mov ebx, DIR_BUFFER
     call floppy_read_sector
     ret
 
+fs_storage_mode dd FS_MODE_NONE
 fs_journal_seq dd 0
+fs_create_flag db 0
+fs_write_name_ptr dd 0
+fs_write_buf_ptr dd 0
+
+fs_init_ram:
+    mov dword [fs_storage_mode], FS_MODE_RAM
+    ; Clear directory sector.
+    mov edi, DIR_BUFFER
+    mov ecx, 512/4
+    xor eax, eax
+    rep stosd
+
+    ; Entry 0: test.txt -> RAM sector DATA_LBA.
+    mov esi, ramfs_test_name
+    mov edi, DIR_BUFFER
+    mov ecx, 16
+.copy_name:
+    lodsb
+    stosb
+    cmp al, 0
+    je .pad_name
+    loop .copy_name
+    jmp .name_done
+.pad_name:
+    dec ecx
+    jz .name_done
+.pad_loop:
+    mov byte [edi], 0
+    inc edi
+    loop .pad_loop
+.name_done:
+    mov dword [DIR_BUFFER+16], DATA_LBA
+    mov dword [DIR_BUFFER+20], ramfs_test_end - ramfs_test_data
+    mov byte [DIR_BUFFER+24], FLAG_FILE
+    mov byte [DIR_BUFFER+25], 0
+
+    ; Clear RAM file area and copy demo file content.
+    mov edi, RAMFS_DATA
+    mov ecx, (16*512)/4
+    xor eax, eax
+    rep stosd
+    mov esi, ramfs_test_data
+    mov edi, RAMFS_DATA
+    mov ecx, ramfs_test_end - ramfs_test_data
+    rep movsb
+    ret
+
+ramfs_test_name db "test.txt",0
+ramfs_test_data db "Hello from RAM FS!",0x0A,0
+ramfs_test_end:
 
 fs_save_dir:
     inc dword [fs_journal_seq]
+    cmp dword [fs_storage_mode], FS_MODE_ATA
+    jne .done
     mov eax, DIR_LBA
     mov ebx, DIR_BUFFER
     call floppy_write_sector
+.done:
     ret
 
 fs_create_file:
-    mov ah, al
+    mov [fs_create_flag], al
     mov edi, DIR_BUFFER
     mov ecx, 16
 .find_empty:
     cmp byte [edi],0
     je .found
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     loop .find_empty
+    xor eax, eax
     ret
 .found:
     push edi
@@ -52,6 +123,7 @@ fs_create_file:
     je .fill_zero
     stosb
     loop .copy_name
+    jmp .name_done
 .fill_zero:
     mov al,0
 .fill_loop:
@@ -61,15 +133,59 @@ fs_create_file:
     ; asignar sector
     mov eax, edi
     sub eax, DIR_BUFFER
-    mov ebx,24
+    mov ebx, DIR_ENTRY_SIZE
     xor edx,edx
     div ebx
     add eax, DATA_LBA
     mov [edi+16], eax   ; LBA
     mov dword [edi+20], 0 ; tamaño
-    mov byte [edi+24], ah ; flag
+    mov al, [fs_create_flag]
+    mov byte [edi+24], al ; flag
     mov byte [edi+25], 0 ; parent(root)
+    call fs_clear_entry_data
     call fs_save_dir
+    mov eax, 1
+    ret
+.name_done:
+    pop edi
+    mov eax, edi
+    sub eax, DIR_BUFFER
+    mov ebx, DIR_ENTRY_SIZE
+    xor edx,edx
+    div ebx
+    add eax, DATA_LBA
+    mov [edi+16], eax
+    mov dword [edi+20], 0
+    mov al, [fs_create_flag]
+    mov byte [edi+24], al
+    mov byte [edi+25], 0
+    call fs_clear_entry_data
+    call fs_save_dir
+    mov eax, 1
+    ret
+
+fs_clear_entry_data:
+    ; Clear the RAM sector assigned to a newly-created file so cat/touch
+    ; never shows stale content from a deleted or previous file.
+    cmp dword [fs_storage_mode], FS_MODE_RAM
+    jne .done
+    cmp byte [edi+24], FLAG_FILE
+    jne .done
+    push eax
+    push ecx
+    push edi
+    mov eax, [edi+16]
+    sub eax, DATA_LBA
+    shl eax, 9
+    mov edi, RAMFS_DATA
+    add edi, eax
+    mov ecx, 512/4
+    xor eax, eax
+    rep stosd
+    pop edi
+    pop ecx
+    pop eax
+.done:
     ret
 
 fs_read_file:
@@ -97,17 +213,34 @@ fs_read_file:
     pop edi
     ; encontrado
     mov eax,[edi+16]      ; LBA
-    mov ecx,[edi+20]      ; [NUEVO] Extraer tamaño exacto en bytes
-    push ecx              ; [NUEVO] Proteger ECX por si el driver ATA lo borra
+    mov ecx,[edi+20]      ; tamaño exacto en bytes
+    cmp dword [fs_storage_mode], FS_MODE_ATA
+    je .read_ata
+    push ecx
+    push esi
+    push edi
+    sub eax, DATA_LBA
+    shl eax, 9
+    mov esi, RAMFS_DATA
+    add esi, eax
+    mov edi, APP_POINTER
+    mov ecx, 512
+    rep movsb
+    pop edi
+    pop esi
+    pop ecx
+    ret
+.read_ata:
+    push ecx
     mov ebx, APP_POINTER
     call floppy_read_sector
-    pop ecx               ; [NUEVO] Restaurar tamaño
+    pop ecx
     ret
 .not_match:
     pop esi
     pop edi
 .next:
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     dec ecx
     jnz .find_file
     xor eax,eax
@@ -115,6 +248,8 @@ fs_read_file:
 
 fs_write_file:
     mov ebp, ecx            ; preservar tamaño a guardar
+    mov [fs_write_name_ptr], esi
+    mov [fs_write_buf_ptr], ebx
     mov edi, DIR_BUFFER
     mov edx,16
 .find_file_write:
@@ -138,7 +273,25 @@ fs_write_file:
     pop edi
     ; encontrado
     mov eax,[edi+16] ; LBA
+    cmp dword [fs_storage_mode], FS_MODE_ATA
+    je .write_ata
+    push esi
+    push edi
+    push ecx
+    mov esi, ebx
+    sub eax, DATA_LBA
+    shl eax, 9
+    mov edi, RAMFS_DATA
+    add edi, eax
+    mov ecx, 512
+    rep movsb
+    pop ecx
+    pop edi
+    pop esi
+    jmp .write_done
+.write_ata:
     call floppy_write_sector
+.write_done:
     mov [edi+20], ebp ; Guarda el tamaño
     call fs_save_dir
     ret
@@ -146,9 +299,20 @@ fs_write_file:
     pop esi
     pop edi
 .next:
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     dec edx
     jnz .find_file_write
+    ; Si el archivo no existe, crearlo y reintentar una vez.
+    mov esi, [fs_write_name_ptr]
+    mov al, FLAG_FILE
+    call fs_create_file
+    cmp eax, 0
+    je .fail_create
+    mov esi, [fs_write_name_ptr]
+    mov ebx, [fs_write_buf_ptr]
+    mov ecx, ebp
+    call fs_write_file
+.fail_create:
     ret
 
 fs_change_dir:
@@ -219,7 +383,7 @@ fs_change_dir:
     jnz .compare_dir
     pop esi
     pop edi
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     dec ecx
     jnz .find_dir
 .not_found:
@@ -259,7 +423,7 @@ fs_delete_entry:
     pop esi
     pop edi
 .next:
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     dec ecx
     jnz .find_del
     xor eax,eax
