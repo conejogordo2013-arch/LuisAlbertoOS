@@ -42,6 +42,11 @@ api_print_string:
 .newline:
     mov dword [cursor_x], 0
     inc dword [cursor_y]
+    cmp dword [cursor_y], 25
+    jl .line_ok
+    ; Clamp to the last row to avoid writing past VGA text memory.
+    mov dword [cursor_y], 24
+.line_ok:
     jmp .loop
 .done:
     popa
