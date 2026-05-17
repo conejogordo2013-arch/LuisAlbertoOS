@@ -76,6 +76,7 @@ net_sub_reset     db "reset",0
 net_sub_icmp      db "icmp",0
 net_sub_l4        db "l4",0
 net_sub_proto     db "proto",0
+net_sub_paginf    db "paginf",0
 
 ; Mensajes Básicos
 msg_err_cmd       db 0x0A,"Error: comando no reconocido.",0
@@ -120,7 +121,7 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "vmunmap- Unmap page demo",0
 
 ; Mensajes de Red
-msg_net_usage     db 0x0A,"Uso: net <comando> [args]",0x0A,"Comandos: info, up, down, send, recv, listen, dump, stats, config, ping, scan, arp, reset, icmp, l4, proto",0
+msg_net_usage     db 0x0A,"Uso: net <comando> [args]",0x0A,"Comandos: info, up, down, send, recv, listen, dump, stats, config, ping, scan, arp, reset, icmp, l4, proto, paginf",0
 msg_net_up        db 0x0A,"Red inicializada (RTL8139 UP). RX/TX habilitados.",0
 msg_net_down      db 0x0A,"Red deshabilitada (RTL8139 DOWN).",0
 msg_net_info      db 0x0A,"Dispositivo: RTL8139",0x0A,"Estado: UP",0x0A,"MAC: Cargada",0
@@ -128,12 +129,12 @@ msg_net_config    db 0x0A,"IP: 192.168.1.100",0x0A,"Mascara: 255.255.255.0",0x0A
 msg_net_stats     db 0x0A,"-- Estadisticas de Red --",0x0A,"Enviados: ",0
 msg_net_recv_msg  db 0x0A,"Paquetes Recibidos: ",0
 msg_net_err       db 0x0A,"Errores: ",0
-msg_net_ping_rep  db 0x0A,"Respuesta desde destino. Tiempo: <1ms",0
-msg_net_scan      db 0x0A,"Escaneando red local... (Modo promiscuo)",0
+msg_net_ping_rep  db 0x0A,"Ping real iniciado: ARP enviado; espera respuesta real con net recv/listen.",0
+msg_net_scan      db 0x0A,"Scan real: ARP broadcast enviado; escucha respuestas con net listen.",0
 msg_net_listen    db 0x0A,"Escuchando paquetes (ESC para salir)...",0
 msg_net_send_err  db 0x0A,"Error: Formato Hexadecimal Invalido.",0
 msg_net_send_ok   db 0x0A,"Paquete enviado correctamente.",0
-msg_net_timeout   db 0x0A,"Tiempo de espera agotado.",0
+msg_net_timeout   db 0x0A,"No se inventan hosts: solo se reportan paquetes reales recibidos.",0
 msg_net_arp_tx    db 0x0A,"ARP request enviado (gateway).",0
 msg_net_reset_ok  db 0x0A,"Driver de red reiniciado.",0
 msg_net_icmp_none db 0x0A,"No ICMP echo request detectado.",0
@@ -142,7 +143,17 @@ msg_net_l4_none   db 0x0A,"L4: none/no ipv4",0
 msg_net_l4_icmp   db 0x0A,"L4: ICMP",0
 msg_net_l4_tcp    db 0x0A,"L4: TCP",0
 msg_net_l4_udp    db 0x0A,"L4: UDP",0
-msg_net_proto     db 0x0A,"Proto stack: ETH/ARP/IP/ICMP/TCP/UDP (parser base)",0
+msg_net_proto     db 0x0A,"Proto stack real: ETH/ARP/IP/ICMP/TCP/UDP + DNS preparado (sin respuestas falsas)",0
+msg_net_paginf_use db 0x0A,"Uso: net paginf <host>",0
+msg_net_paginf_host db 0x0A,"Host: ",0
+msg_net_paginf_start db 0x0A,"PAGINF real: resolviendo gateway por ARP para DNS/ICMP...",0
+msg_net_paginf_wait db 0x0A,"Sin simular: usa net listen/recv para capturar ARP/DNS/ICMP reales; IP/puerto/ping se muestran cuando haya respuesta.",0
+msg_rtl_stats     db 0x0A,"-- RTL8139 driver --",0x0A,"TX ok: ",0
+msg_rtl_rx_ok     db "RX ok: ",0
+msg_rtl_tx_err    db "TX err: ",0
+msg_rtl_rx_err    db "RX err: ",0
+msg_rtl_last_len  db "Last RX len: ",0
+msg_rtl_last_isr  db "Last ISR: ",0
 msg_fs_unavail    db 0x0A,"Error: filesystem no disponible.",0
 msg_net_unavail   db 0x0A,"Error: red RTL8139 no disponible.",0
 msg_audio_unavail db 0x0A,"Error: audio AC97 no disponible.",0
@@ -1041,6 +1052,11 @@ do_net:
     cmp eax, 0
     je net_cmd_proto
 
+    mov edi, net_sub_paginf
+    call strcmp
+    cmp eax, 0
+    je net_cmd_paginf
+
 .net_missing:
     mov esi, msg_net_unavail
     call api_print_string
@@ -1068,7 +1084,7 @@ net_cmd_up:
     jmp shell_loop
 
 net_cmd_down:
-    ; Simula apagado
+    call rtl8139_shutdown
     mov esi, msg_net_down
     call api_print_string
     jmp shell_loop
@@ -1161,6 +1177,30 @@ net_cmd_stats:
     call api_print_string
     mov eax, [net_errors]
     call print_hex32
+    mov esi, msg_rtl_stats
+    call api_print_string
+    mov eax, [rtl_tx_packets]
+    call print_hex32
+    mov esi, msg_rtl_rx_ok
+    call api_print_string
+    mov eax, [rtl_rx_packets]
+    call print_hex32
+    mov esi, msg_rtl_tx_err
+    call api_print_string
+    mov eax, [rtl_tx_errors]
+    call print_hex32
+    mov esi, msg_rtl_rx_err
+    call api_print_string
+    mov eax, [rtl_rx_errors]
+    call print_hex32
+    mov esi, msg_rtl_last_len
+    call api_print_string
+    mov eax, [rtl_last_rx_len]
+    call print_hex32
+    mov esi, msg_rtl_last_isr
+    call api_print_string
+    movzx eax, word [rtl_last_isr]
+    call print_hex32
     jmp shell_loop
 
 net_cmd_config:
@@ -1169,11 +1209,18 @@ net_cmd_config:
     jmp shell_loop
 
 net_cmd_ping:
-    call api_delay
+    call net_build_arp_request
+    call rtl8139_transmit
+    cmp eax, 0
+    je .ping_fail
+    inc dword [net_pkts_sent]
     mov esi, msg_net_ping_rep
     call api_print_string
-    inc dword [net_pkts_sent]
-    inc dword [net_pkts_recv]
+    jmp shell_loop
+.ping_fail:
+    inc dword [net_errors]
+    mov esi, msg_net_unavail
+    call api_print_string
     jmp shell_loop
 
 
@@ -1244,11 +1291,50 @@ net_cmd_proto:
     call api_print_string
     jmp shell_loop
 
+net_cmd_paginf:
+    mov esi, [hex_arg_ptr]
+    cmp esi, 0
+    je .usage
+    cmp byte [esi], 0
+    je .usage
+    mov esi, msg_net_paginf_host
+    call api_print_string
+    mov esi, [hex_arg_ptr]
+    call api_print_string
+    mov esi, msg_net_paginf_start
+    call api_print_string
+    call net_build_dns_arp_request
+    call rtl8139_transmit
+    cmp eax, 0
+    je .fail
+    inc dword [net_pkts_sent]
+    mov esi, msg_net_paginf_wait
+    call api_print_string
+    jmp shell_loop
+.usage:
+    mov esi, msg_net_paginf_use
+    call api_print_string
+    jmp shell_loop
+.fail:
+    inc dword [net_errors]
+    mov esi, msg_net_unavail
+    call api_print_string
+    jmp shell_loop
+
 net_cmd_scan:
+    call net_build_arp_request
+    call rtl8139_transmit
+    cmp eax, 0
+    je .scan_fail
+    inc dword [net_pkts_sent]
     mov esi, msg_net_scan
     call api_print_string
-    call api_delay
     mov esi, msg_net_timeout
+    call api_print_string
+    jmp shell_loop
+.scan_fail:
+    inc dword [net_errors]
+    mov esi, msg_net_unavail
     call api_print_string
     jmp shell_loop
 
