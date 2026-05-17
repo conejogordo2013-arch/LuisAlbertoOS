@@ -6,3 +6,5 @@ api_table:
     dd api_print_string     ; offset 0
     dd api_clear_screen     ; offset 4
     dd api_delay            ; offset 8
+; syscall vector id (apps can int 0x80 directly; marker entry)
+    dd 0x80

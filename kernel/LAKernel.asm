@@ -38,6 +38,12 @@ gdt_code:
 gdt_data:
     dw 0xFFFF, 0x0000       ; Base=0, Limit=4GB, Data, Read/Write
     db 0x00, 10010010b, 11001111b, 0x00
+gdt_user_code:
+    dw 0xFFFF, 0x0000
+    db 0x00, 11111010b, 11001111b, 0x00
+gdt_user_data:
+    dw 0xFFFF, 0x0000
+    db 0x00, 11110010b, 11001111b, 0x00
 gdt_end:
 
 gdt_descriptor:
@@ -55,3 +61,26 @@ gdt_descriptor:
 %include "drivers/vga_image.lasys"
 %include "drivers/rtl8139.lasys"   ; <--- Añadir Driver de Red
 %include "kernel/net.lasys"        ; <--- Añadir Pila de Red
+%include "drivers/ac97.lasys"
+
+%include "kernel/interrupts.lasys"
+
+%include "kernel/memory.lasys"
+
+%include "kernel/scheduler.lasys"
+
+user_entry_stub:
+    mov ax, 0x23
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov eax, 1
+    mov ebx, user_msg
+    int 0x80
+.user_loop:
+    mov eax, 4
+    int 0x80
+    jmp .user_loop
+
+user_msg db 0x0A, "[RING3] User stub activo via int80.",0

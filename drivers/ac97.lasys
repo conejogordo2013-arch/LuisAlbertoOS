@@ -1,0 +1,62 @@
+; ==================================================================
+; ac97.lasys - Driver mínimo AC'97 opcional + beep de verificación
+; ==================================================================
+
+%ifndef AC97_LASYS
+%define AC97_LASYS
+
+global ac97_init
+global ac97_beep
+
+ac97_present dd 0
+
+; Detección mínima: si el puerto base responde distinto de 0xFF
+; (placeholder robusto para entorno bare-metal de este proyecto)
+AC97_MIXER_BASE equ 0xE000
+
+ac97_init:
+    pusha
+    mov dx, AC97_MIXER_BASE
+    in al, dx
+    cmp al, 0xFF
+    jne .present
+    mov dword [ac97_present], 0
+    popa
+    xor eax, eax
+    ret
+.present:
+    mov dword [ac97_present], 1
+    popa
+    mov eax, 1
+    ret
+
+; Beep de prueba usando speaker PIT (validación sonora de hardware audio disponible)
+ac97_beep:
+    pusha
+    ; Programar PIT canal 2
+    mov al, 0xB6
+    out 0x43, al
+    mov ax, 1193             ; ~1kHz
+    out 0x42, al
+    mov al, ah
+    out 0x42, al
+
+    ; Encender speaker
+    in al, 0x61
+    mov ah, al
+    or al, 0x03
+    out 0x61, al
+
+    ; pequeña espera
+    mov ecx, 0x1FFFF
+.delay:
+    loop .delay
+
+    ; apagar speaker
+    mov al, ah
+    and al, 0xFC
+    out 0x61, al
+    popa
+    ret
+
+%endif

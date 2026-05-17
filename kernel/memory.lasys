@@ -1,0 +1,210 @@
+; ==================================================================
+; memory.lasys - Memoria física/virtual + heap simple para LuisAlbertoOS
+; ==================================================================
+%ifndef MEMORY_LASYS
+%define MEMORY_LASYS
+
+PAGE_SIZE            equ 4096
+TOTAL_FRAMES         equ 1024            ; 4MB gestionados para demo estable
+FRAME_BITMAP_BYTES   equ TOTAL_FRAMES/8
+FRAME_BITMAP         equ 0xA000          ; zona baja libre para bitmap
+KHEAP_START          equ 0x100000
+KHEAP_SIZE           equ 0x20000         ; 128KB
+PAGE_DIR_BASE        equ 0xB000
+PAGE_TABLE0_BASE     equ 0xC000
+
+mem_total_bytes      dd TOTAL_FRAMES * PAGE_SIZE
+mem_used_bytes       dd 0
+heap_ptr             dd KHEAP_START
+heap_end             dd KHEAP_START + KHEAP_SIZE
+paging_enabled       dd 0
+page_directory_phys  dd PAGE_DIR_BASE
+last_frame_alloc    dd 0
+
+mem_init:
+    pusha
+    mov edi, FRAME_BITMAP
+    mov ecx, FRAME_BITMAP_BYTES
+    xor eax, eax
+    rep stosb
+    mov dword [mem_used_bytes], 0
+    mov dword [heap_ptr], KHEAP_START
+    mov dword [last_frame_alloc], 0
+    popa
+    ret
+
+frame_alloc:
+    ; salida eax=addr fisica, 0 si no hay
+    pusha
+    mov edi, FRAME_BITMAP
+    xor ebx, ebx
+.find_byte:
+    cmp ebx, FRAME_BITMAP_BYTES
+    jae .no_frame
+    mov al, [edi+ebx]
+    cmp al, 0xFF
+    jne .find_bit
+    inc ebx
+    jmp .find_byte
+.find_bit:
+    mov ecx, 0
+.bit_loop:
+    bt eax, ecx
+    jc .next_bit
+    bts eax, ecx
+    mov [edi+ebx], al
+    mov eax, ebx
+    shl eax, 3
+    add eax, ecx
+    imul eax, PAGE_SIZE
+    add dword [mem_used_bytes], PAGE_SIZE
+    mov [last_frame_alloc], eax
+    mov [esp+28], eax
+    popa
+    ret
+.next_bit:
+    inc ecx
+    cmp ecx, 8
+    jl .bit_loop
+    inc ebx
+    jmp .find_byte
+.no_frame:
+    mov dword [esp+28], 0
+    popa
+    ret
+
+frame_free:
+    ; entrada eax=addr fisica
+    pusha
+    mov ebx, eax
+    shr ebx, 12
+    cmp ebx, TOTAL_FRAMES
+    jae .done
+    mov edx, ebx
+    shr edx, 3
+    and ebx, 7
+    mov al, [FRAME_BITMAP+edx]
+    bt eax, ebx
+    jnc .done
+    btc eax, ebx
+    mov [FRAME_BITMAP+edx], al
+    sub dword [mem_used_bytes], PAGE_SIZE
+.done:
+    popa
+    ret
+
+paging_init:
+    pusha
+    ; Page directory limpio
+    mov edi, PAGE_DIR_BASE
+    mov ecx, 1024
+    xor eax, eax
+    rep stosd
+
+    ; Page table 0: identity map primeros 4MB
+    mov edi, PAGE_TABLE0_BASE
+    mov ecx, 1024
+    xor eax, eax
+.map_loop:
+    mov edx, eax
+    or edx, 0x003          ; Present + RW
+    mov [edi], edx
+    add eax, 0x1000
+    add edi, 4
+    loop .map_loop
+
+    ; PDE[0] -> table0
+    mov eax, PAGE_TABLE0_BASE
+    or eax, 0x003
+    mov [PAGE_DIR_BASE], eax
+
+    ; Cargar CR3 y activar PG en CR0
+    mov eax, PAGE_DIR_BASE
+    mov cr3, eax
+    mov eax, cr0
+    or eax, 0x80000000
+    mov cr0, eax
+
+    mov dword [paging_enabled], 1
+    popa
+    ret
+
+kmalloc:
+    ; entrada ecx=size, salida eax=ptr o 0
+    mov eax, [heap_ptr]
+    mov edx, eax
+    add edx, ecx
+    cmp edx, [heap_end]
+    ja .fail
+    mov [heap_ptr], edx
+    ret
+.fail:
+    xor eax, eax
+    ret
+
+kfree:
+    ; bump allocator: free no-op intencional
+    ret
+
+
+
+map_page:
+    ; IN: EAX=virt, EBX=phys, EDX=flags (low 12 bits)
+    pusha
+    mov ecx, eax
+    shr ecx, 22                  ; pde index
+    mov esi, PAGE_DIR_BASE
+    mov edi, [esi + ecx*4]
+    test edi, 1
+    jnz .have_pt
+    ; solo soporta PDE0 en esta etapa
+    cmp ecx, 0
+    jne .fail
+    mov edi, PAGE_TABLE0_BASE
+    or edi, 0x003
+    mov [esi + ecx*4], edi
+.have_pt:
+    and edi, 0xFFFFF000
+    mov ecx, eax
+    shr ecx, 12
+    and ecx, 0x3FF               ; pte index
+    mov eax, ebx
+    and eax, 0xFFFFF000
+    and edx, 0xFFF
+    or eax, edx
+    mov [edi + ecx*4], eax
+    mov eax, 1
+    mov [esp+28], eax
+    popa
+    ret
+.fail:
+    xor eax,eax
+    mov [esp+28], eax
+    popa
+    ret
+
+unmap_page:
+    ; IN: EAX=virt
+    pusha
+    mov ecx, eax
+    shr ecx, 22
+    mov esi, PAGE_DIR_BASE
+    mov edi, [esi + ecx*4]
+    test edi,1
+    jz .fail
+    and edi, 0xFFFFF000
+    mov ecx, eax
+    shr ecx, 12
+    and ecx, 0x3FF
+    mov dword [edi + ecx*4], 0
+    mov eax, 1
+    mov [esp+28], eax
+    popa
+    ret
+.fail:
+    xor eax,eax
+    mov [esp+28], eax
+    popa
+    ret
+
+%endif

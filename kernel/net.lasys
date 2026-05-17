@@ -19,8 +19,13 @@ IP_VERSION_IHL equ 14 ; 1 byte
 IP_TOS         equ 15 ; 1 byte
 IP_TOTAL_LEN   equ 16 ; 2 bytes
 IP_PROTOCOL    equ 23 ; 1 byte (0x11 = UDP, 0x06 = TCP, 0x01 = ICMP)
+L4_TCP         equ 0x06
+L4_UDP         equ 0x11
+L4_ICMP        equ 0x01
 IP_SRC_ADDR    equ 26 ; 4 bytes
 IP_DST_ADDR    equ 30 ; 4 bytes
+IP_HDR_MIN_LEN equ 20
+ICMP_TYPE      equ 34
 
 ; Macro para extraer el EtherType
 ; Entrada: ESI apuntando al buffer del paquete
@@ -42,6 +47,125 @@ net_parse_ipv4:
     ret
 .not_ip:
     xor eax, eax
+    ret
+
+
+
+net_local_mac db 0x52,0x54,0x00,0x12,0x34,0x56
+net_local_ip  db 192,168,1,100
+net_gw_ip     db 192,168,1,1
+net_bcast_mac db 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
+
+; Construye ARP request en RTL8139_TX_BUF. salida ECX=len
+net_build_arp_request:
+    mov edi, RTL8139_TX_BUF
+    ; dst mac broadcast
+    mov esi, net_bcast_mac
+    mov ecx, 6
+    rep movsb
+    ; src mac
+    mov esi, net_local_mac
+    mov ecx, 6
+    rep movsb
+    ; ethertype arp 0x0806
+    mov byte [edi], 0x08
+    mov byte [edi+1], 0x06
+    add edi, 2
+    ; htype, ptype, hlen, plen, op
+    mov word [edi], 0x0100
+    mov word [edi+2], 0x0008
+    mov byte [edi+4], 6
+    mov byte [edi+5], 4
+    mov word [edi+6], 0x0100
+    ; sha
+    mov esi, net_local_mac
+    lea edi, [edi+8]
+    mov ecx, 6
+    rep movsb
+    ; spa
+    mov esi, net_local_ip
+    mov ecx, 4
+    rep movsb
+    ; tha zeros
+    xor eax, eax
+    stosd
+    stosw
+    ; tpa (gateway)
+    mov esi, net_gw_ip
+    mov ecx, 4
+    rep movsb
+    mov ecx, 42
+    ret
+
+
+
+net_checksum16:
+    ; IN: ESI=buffer, ECX=bytes (par)
+    xor eax,eax
+.sum:
+    cmp ecx,0
+    je .fold
+    movzx edx, word [esi]
+    xchg dh, dl
+    add eax, edx
+    add esi,2
+    sub ecx,2
+    jmp .sum
+.fold:
+    mov edx,eax
+    shr edx,16
+    and eax,0xFFFF
+    add eax,edx
+    mov edx,eax
+    shr edx,16
+    add eax,edx
+    not ax
+    ret
+
+net_parse_icmp_echo:
+    ; IN: ESI=frame, ECX=len ; OUT EAX=1 if ICMP echo req
+    cmp ecx, 42
+    jl .no
+    call net_get_ethertype
+    cmp ax, ETH_TYPE_IP4
+    jne .no
+    mov al, [esi + IP_PROTOCOL]
+    cmp al, 1
+    jne .no
+    mov al, [esi + ICMP_TYPE]
+    cmp al, 8
+    jne .no
+    mov eax,1
+    ret
+.no:
+    xor eax,eax
+    ret
+
+
+
+net_parse_l4:
+    ; IN: ESI=frame OUT: EAX=0 none,1 icmp,2 tcp,3 udp
+    call net_get_ethertype
+    cmp ax, ETH_TYPE_IP4
+    jne .none
+    mov al, [esi + IP_PROTOCOL]
+    cmp al, L4_ICMP
+    je .icmp
+    cmp al, L4_TCP
+    je .tcp
+    cmp al, L4_UDP
+    je .udp
+.none:
+    xor eax,eax
+    ret
+.icmp:
+    mov eax,1
+    ret
+.tcp:
+    mov eax,2
+    ret
+.udp:
+    mov eax,3
     ret
 
 %endif
