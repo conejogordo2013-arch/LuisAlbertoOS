@@ -1,37 +1,77 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
 echo "Building LuisAlbertoOS..."
+
+command -v nasm >/dev/null 2>&1 || { echo "Error: nasm is required to build LuisAlbertoOS." >&2; exit 1; }
+command -v dd >/dev/null 2>&1 || { echo "Error: dd is required to build LuisAlbertoOS." >&2; exit 1; }
 
 mkdir -p boot kernel apps drivers libs bin
 
-# 1. Bootloader
-nasm -f bin boot/LABootL.asm -o bin/boot.bin
+# Disk layout (LBA sectors, 512 bytes each):
+#   0       boot sector
+#   1..40   kernel load window read by boot/LABootL.asm (40 sectors)
+#   64..    apps and optional demo data, safely outside the kernel window
+KERNEL_LOAD_SECTORS=40
+KERNEL_START_LBA=1
+APP_SAMPLE_LBA=64
+APP_TEXTEDIT_LBA=66
+APP_TASKMGR_LBA=68
+APP_LATEXTEDIT_LBA=70
+FS_DIR_LBA=96
+FS_DATA_LBA=97
 
-# 2. Kernel
+# 1. Bootloader and kernel
+nasm -f bin boot/LABootL.asm -o bin/boot.bin
 nasm -f bin kernel/LAKernel.asm -o bin/kernel.bin
 
-# 3. Apps
+kernel_size=$(wc -c < bin/kernel.bin)
+max_kernel_size=$((KERNEL_LOAD_SECTORS * 512))
+kernel_end_lba=$((KERNEL_START_LBA + KERNEL_LOAD_SECTORS))
+first_payload_lba=$APP_SAMPLE_LBA
+if (( kernel_size > max_kernel_size )); then
+    echo "Error: kernel.bin is ${kernel_size} bytes; bootloader limit is ${max_kernel_size} bytes." >&2
+    exit 1
+fi
+if (( first_payload_lba < kernel_end_lba )); then
+    echo "Error: payload LBA ${first_payload_lba} overlaps kernel load window ending before LBA ${kernel_end_lba}." >&2
+    exit 1
+fi
+
+# 2. Apps
 nasm -f bin apps/sample1.laa.asm -o bin/sample1.laa
 nasm -f bin apps/textedit.laa.asm -o bin/textedit.laa
 nasm -f bin apps/taskmgr.laa.asm -o bin/taskmgr.laa
 nasm -f bin apps/LATextedit.asm -o bin/LATextedit.laa
 
-# 4. Crear imagen SOLO UNA VEZ
+# 3. Create image once
 dd if=/dev/zero of=LuisAlbertoOS.img bs=512 count=2880 status=none
 
-# 5. Bootloader
+# 4. Bootloader and kernel
 dd if=bin/boot.bin of=LuisAlbertoOS.img conv=notrunc status=none
+dd if=bin/kernel.bin of=LuisAlbertoOS.img seek=${KERNEL_START_LBA} conv=notrunc status=none
 
-# 6. Kernel
-dd if=bin/kernel.bin of=LuisAlbertoOS.img seek=1 conv=notrunc status=none
+# 5. Apps (manual sectors outside the kernel load window)
+dd if=bin/sample1.laa    of=LuisAlbertoOS.img seek=${APP_SAMPLE_LBA} conv=notrunc status=none
+dd if=bin/textedit.laa   of=LuisAlbertoOS.img seek=${APP_TEXTEDIT_LBA} conv=notrunc status=none
+dd if=bin/taskmgr.laa    of=LuisAlbertoOS.img seek=${APP_TASKMGR_LBA} conv=notrunc status=none
+dd if=bin/LATextedit.laa of=LuisAlbertoOS.img seek=${APP_LATEXTEDIT_LBA} conv=notrunc status=none
 
-# 7. Apps (sectores manuales)
-dd if=bin/sample1.laa   of=LuisAlbertoOS.img seek=19 conv=notrunc status=none
-dd if=bin/textedit.laa  of=LuisAlbertoOS.img seek=21 conv=notrunc status=none
-dd if=bin/taskmgr.laa   of=LuisAlbertoOS.img seek=23 conv=notrunc status=none
-dd if=bin/LATextedit.laa of=LuisAlbertoOS.img seek=25 conv=notrunc status=none
-
-# 8. Mock FS (opcional)
-printf "test.txt\0\0\0\0\0\0\0\0\x1F\x00\x00\x00\x0F\x00\x00\x00" > bin/mock_dir.bin
-dd if=bin/mock_dir.bin of=LuisAlbertoOS.img seek=30 conv=notrunc status=none
+# 6. Mock FS directory (optional demo data). Entry size: 26 bytes.
+FS_DATA_LBA=${FS_DATA_LBA} python3 - <<'PY'
+import os
+from pathlib import Path
+entry = bytearray(512)
+name = b"test.txt"
+entry[0:len(name)] = name
+entry[16:20] = int(os.environ["FS_DATA_LBA"]).to_bytes(4, "little")
+entry[20:24] = (15).to_bytes(4, "little")
+entry[24] = 1  # FLAG_FILE
+entry[25] = 0  # root parent
+Path("bin/mock_dir.bin").write_bytes(entry)
+PY
+dd if=bin/mock_dir.bin of=LuisAlbertoOS.img seek=${FS_DIR_LBA} conv=notrunc status=none
+printf 'Hello from FS!\n\0' > bin/mock_test.txt
+dd if=bin/mock_test.txt of=LuisAlbertoOS.img seek=${FS_DATA_LBA} conv=notrunc status=none
 
 echo "Build complete."

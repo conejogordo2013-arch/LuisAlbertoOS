@@ -17,6 +17,9 @@ msg_welcome       db 0x0A,"LuisAlbertoOS Shell REAL v3.1 (Net Enabled)",0x0A,0
 msg_newline       db 0x0A,0
 
 cmd_buffer        times 64 db 0
+char_buffer       db 0,0
+hex_buffer        times 9 db 0
+entry_name_buffer times 17 db 0
 arg_ptr           dd 0
 
 current_path      times 128 db 0
@@ -55,7 +58,6 @@ cmd_journal   db "journal",0
 cmd_tasks     db "tasks",0
 cmd_vmmap     db "vmmap",0
 cmd_vmunmap   db "vmunmap",0
-cmd_ring3     db "ring3",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -77,13 +79,13 @@ net_sub_proto     db "proto",0
 
 ; Mensajes Básicos
 msg_err_cmd       db 0x0A,"Error: comando no reconocido.",0
-msg_created_dir   db 0x0A,"Carpeta creada en disco.",0
-msg_created_file  db 0x0A,"Archivo creado en disco.",0
+msg_created_dir   db 0x0A,"Carpeta creada.",0
+msg_created_file  db 0x0A,"Archivo creado.",0
 msg_edit_info     db 0x0A,"--- EDITOR (ESC para guardar y salir) ---",0x0A,0
 msg_saved         db 0x0A,"Archivo guardado.",0
 msg_dir_header    db 0x0A,"-- DIRECTORIO ACTUAL --",0x0A,0
 msg_dir_type      db " <DIR>",0
-msg_audio     db 0x0A,"Comando no implementado.",0
+msg_audio     db 0x0A,"Audio: usa beep para probar salida sonora.",0
 msg_err_img       db 0x0A,"Error: Archivo de imagen no encontrado o vacio.",0
 msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "dir    - Lista directorio",0x0A, \
@@ -92,7 +94,7 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "mkdir  - Crea carpeta",0x0A, \
                 "touch  - Crea archivo",0x0A, \
                 "edit   - Editor de archivos",0x0A, \
-                "audio  - Reproducir WAV No implementado Aun",0x0A, \
+                "audio  - Estado/prueba de audio",0x0A, \
                 "img    - Visualizador de imagen",0x0A, \
                 "net    - Subsistema de red (net help)",0x0A, \
                 "help   - Muestra esta ayuda",0x0A, \
@@ -115,8 +117,7 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "journal- Estado journal FS",0x0A, \
                 "tasks  - Lista tasks",0x0A, \
                 "vmmap  - Map page demo",0x0A, \
-                "vmunmap- Unmap page demo",0x0A, \
-                "ring3  - Probar salto ring3",0
+                "vmunmap- Unmap page demo",0
 
 ; Mensajes de Red
 msg_net_usage     db 0x0A,"Uso: net <comando> [args]",0x0A,"Comandos: info, up, down, send, recv, listen, dump, stats, config, ping, scan, arp, reset, icmp, l4, proto",0
@@ -142,14 +143,15 @@ msg_net_l4_icmp   db 0x0A,"L4: ICMP",0
 msg_net_l4_tcp    db 0x0A,"L4: TCP",0
 msg_net_l4_udp    db 0x0A,"L4: UDP",0
 msg_net_proto     db 0x0A,"Proto stack: ETH/ARP/IP/ICMP/TCP/UDP (parser base)",0
-msg_fs_unavail    db 0x0A,"Error: almacenamiento ATA no disponible.",0
+msg_fs_unavail    db 0x0A,"Error: filesystem no disponible.",0
 msg_net_unavail   db 0x0A,"Error: red RTL8139 no disponible.",0
 msg_audio_unavail db 0x0A,"Error: audio AC97 no disponible.",0
 msg_dev_status    db 0x0A,"Estado dispositivos:",0x0A,0
-msg_dev_fs        db "ATA: ",0
+msg_dev_fs        db "FS: ",0
 msg_dev_net       db 0x0A,"RTL8139: ",0
 msg_dev_audio     db 0x0A,"AC97: ",0
 msg_dev_ok        db "OK",0
+msg_dev_ram       db "RAM FS",0
 msg_dev_missing   db "NO DETECTADO",0
 msg_mem_hdr       db 0x0A,"Memoria kernel:",0x0A,0
 msg_mem_total     db "Total bytes: ",0
@@ -180,7 +182,7 @@ msg_mktask_ok     db 0x0A,"Task kernel registrada.",0
 msg_mktask_fail   db 0x0A,"No se pudo registrar task.",0
 msg_exc_count     db 0x0A,"Exceptions: ",0
 msg_exc_last      db 0x0A,"Last exception: ",0
-msg_block_ok      db 0x0A,"Task actual bloqueada.",0
+msg_block_ok      db 0x0A,"Protegido: la shell principal no se bloquea.",0
 msg_wake_ok       db 0x0A,"Task 0 despertada.",0
 msg_journal_seq   db 0x0A,"FS journal seq: ",0
 msg_tasks_hdr     db 0x0A,"Tasks (idx/state):",0x0A,0
@@ -188,7 +190,6 @@ msg_vmmap_ok      db 0x0A,"vm map ok",0
 msg_vmmap_fail    db 0x0A,"vm map fail",0
 msg_vmunmap_ok    db 0x0A,"vm unmap ok",0
 msg_vmunmap_fail  db 0x0A,"vm unmap fail",0
-msg_ring3_info    db 0x0A,"Saltando a user stub ring3...",0
 msg_sw_from       db 0x0A,"Last from: ",0
 msg_sw_to         db 0x0A,"Last to: ",0
 msg_sched_on      db 0x0A,"Scheduler: ",0
@@ -214,6 +215,8 @@ shell_start:
     mov esi, path_root_init
     mov edi, current_path
     call strcpy
+    cmp dword [fs_driver_available], 0
+    je skip_init
     call fs_init
 skip_init:
     mov esi, msg_welcome
@@ -227,6 +230,10 @@ shell_loop:
     mov esi, shell_prompt
     call api_print_string
 
+    mov edi, cmd_buffer
+    mov ecx, 64
+    xor eax, eax
+    rep stosb
     mov edi, cmd_buffer
     xor ecx, ecx
 read_key:
@@ -425,11 +432,6 @@ execute:
     cmp eax, 0
     je do_vmunmap
 
-    mov edi, cmd_ring3
-    call strcmp
-    cmp eax, 0
-    je do_ring3
-
     ; --- INTEGRACIÓN DEL SUBSISTEMA DE RED ---
     mov edi, cmd_net
     call strcmp
@@ -457,10 +459,9 @@ do_dir:
 .dir_loop:
     cmp byte [esi], 0    
     je .next_entry
-    mov edi, esi
     push esi
     push ecx
-    call api_print_string
+    call print_entry_name
     pop ecx
     pop esi
     cmp byte [esi+24], 2 
@@ -553,19 +554,27 @@ do_edit:
     dec edi
     mov byte [edi], 0
     dec ecx
+    call api_backspace
     jmp .edit_loop
 .save_file:
     mov byte [edi], 0
-    mov esi, [arg_ptr]     
-    mov ebx, BUFFER_EDITOR 
-    mov ecx, 512           
+    inc ecx                ; include null terminator in stored size
+    mov esi, [arg_ptr]
+    mov ebx, BUFFER_EDITOR
     call fs_write_file
     mov esi, msg_saved
     call api_print_string
     jmp shell_loop
 
 do_audio:
+    cmp dword [audio_driver_available], 0
+    je .audio_no
+    call ac97_beep
     mov esi, msg_audio
+    call api_print_string
+    jmp shell_loop
+.audio_no:
+    mov esi, msg_audio_unavail
     call api_print_string
     jmp shell_loop
 
@@ -573,6 +582,8 @@ do_img:
     cmp dword [fs_driver_available], 0
     je fs_missing_cmd
     mov esi, [arg_ptr]
+    cmp esi, 0
+    je .no_arg
     cmp byte [esi], 0
     je .no_arg
     call fs_read_file
@@ -611,7 +622,7 @@ do_devices:
     call api_print_string
     cmp dword [fs_driver_available], 0
     je .fs_no
-    mov esi, msg_dev_ok
+    mov esi, msg_dev_ram
     jmp .fs_out
 .fs_no:
     mov esi, msg_dev_missing
@@ -845,7 +856,7 @@ do_exc:
     jmp shell_loop
 
 do_block:
-    call scheduler_block_current
+    ; No bloquear task0: es la terminal. Mantener el comando seguro.
     mov esi, msg_block_ok
     call api_print_string
     jmp shell_loop
@@ -919,24 +930,6 @@ do_vmunmap:
     call api_print_string
     jmp shell_loop
 
-do_ring3:
-    mov esi, msg_ring3_info
-    call api_print_string
-    ; construir iret frame a CPL3
-    cli
-    mov ax, 0x23
-    mov ds, ax
-    mov es, ax
-    push dword 0x23
-    push dword 0x8D000
-    pushfd
-    pop eax
-    or eax, 0x200
-    push eax
-    push dword 0x1B
-    push dword user_entry_stub
-    iretd
-
 do_help:
     mov esi, msg_help
     call api_print_string
@@ -947,6 +940,7 @@ do_help:
 ; ==================================================================
 
 do_net:
+    mov dword [hex_arg_ptr], 0
     cmp dword [net_driver_available], 0
     je .net_missing
     mov esi, [arg_ptr]
@@ -1066,6 +1060,9 @@ net_cmd_info:
 
 net_cmd_up:
     call rtl8139_init
+    cmp eax, 0
+    je do_net.net_missing
+    mov dword [net_driver_available], 1
     mov esi, msg_net_up
     call api_print_string
     jmp shell_loop
@@ -1100,7 +1097,9 @@ net_cmd_send:
     call char_to_hex
     cmp ah, 1
     je .send_err
-    or al, bl            
+    or al, bl
+    cmp ecx, 1518
+    jae .send_err         ; Evitar desbordar el buffer TX
     mov [edi], al
     inc esi
     inc edi
@@ -1188,6 +1187,9 @@ net_cmd_arp:
 
 net_cmd_reset:
     call rtl8139_init
+    cmp eax, 0
+    je do_net.net_missing
+    mov dword [net_driver_available], 1
     mov esi, msg_net_reset_ok
     call api_print_string
     jmp shell_loop
@@ -1254,18 +1256,42 @@ net_cmd_scan:
 ; ==================================================================
 ; UTILIDADES BÁSICAS Y RED
 ; ==================================================================
+print_entry_name:
+    ; ESI = entrada de directorio. Copia nombre de 16 bytes a un
+    ; buffer terminado en cero para no imprimir LBA/tamaño como texto.
+    pusha
+    mov edi, entry_name_buffer
+    mov ecx, 16
+.copy:
+    lodsb
+    cmp al, 0
+    je .zero_rest
+    stosb
+    loop .copy
+    jmp .done_copy
+.zero_rest:
+    mov byte [edi], 0
+    jmp .print
+.done_copy:
+    mov byte [edi], 0
+.print:
+    mov esi, entry_name_buffer
+    call api_print_string
+    popa
+    ret
+
 print_char:
     pusha
-    mov byte [cmd_buffer+60], al
-    mov byte [cmd_buffer+61], 0
-    mov esi, cmd_buffer+60
+    mov [char_buffer], al
+    mov byte [char_buffer+1], 0
+    mov esi, char_buffer
     call api_print_string
     popa
     ret
 
 print_hex32:
     pusha
-    mov edi, cmd_buffer+40
+    mov edi, hex_buffer
     mov ecx, 8
 .hex_loop:
     rol eax, 4
@@ -1282,7 +1308,7 @@ print_hex32:
     inc edi
     loop .hex_loop
     mov byte [edi], 0
-    mov esi, cmd_buffer+40
+    mov esi, hex_buffer
     call api_print_string
     mov esi, msg_num_nl
     call api_print_string
