@@ -1,7 +1,7 @@
 ; ------------------------------------------------------------------
 ; fs.lasys - Minimal Flat Filesystem REAL
 ; Directory LBA: 30. Máx 16 archivos
-; Entry: 16 bytes nombre, 4 bytes LBA, 4 bytes tamaño, 1 byte flags, 1 byte parent
+; Entry: 16 bytes nombre, 4 bytes LBA, 4 bytes tamaño, 1 byte flags, 1 byte parent (26 bytes)
 ; ------------------------------------------------------------------
 
 %ifndef FS_LASYS
@@ -12,6 +12,7 @@ DATA_LBA    equ 31
 DIR_BUFFER  equ 0x5000  ; Directorio en memoria
 FILE_BUFFER equ 0x6000  ; Buffer I/O
 APP_POINTER equ 0x7000  ; Puntero a app cargada
+DIR_ENTRY_SIZE equ 26
 
 ; FLAGS
 FLAG_FILE   equ 1
@@ -40,7 +41,7 @@ fs_create_file:
 .find_empty:
     cmp byte [edi],0
     je .found
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     loop .find_empty
     ret
 .found:
@@ -52,6 +53,7 @@ fs_create_file:
     je .fill_zero
     stosb
     loop .copy_name
+    jmp .name_done
 .fill_zero:
     mov al,0
 .fill_loop:
@@ -61,7 +63,7 @@ fs_create_file:
     ; asignar sector
     mov eax, edi
     sub eax, DIR_BUFFER
-    mov ebx,24
+    mov ebx, DIR_ENTRY_SIZE
     xor edx,edx
     div ebx
     add eax, DATA_LBA
@@ -69,6 +71,20 @@ fs_create_file:
     mov dword [edi+20], 0 ; tamaño
     mov byte [edi+24], ah ; flag
     mov byte [edi+25], 0 ; parent(root)
+    call fs_save_dir
+    ret
+.name_done:
+    pop edi
+    mov eax, edi
+    sub eax, DIR_BUFFER
+    mov ebx, DIR_ENTRY_SIZE
+    xor edx,edx
+    div ebx
+    add eax, DATA_LBA
+    mov [edi+16], eax
+    mov dword [edi+20], 0
+    mov byte [edi+24], ah
+    mov byte [edi+25], 0
     call fs_save_dir
     ret
 
@@ -107,7 +123,7 @@ fs_read_file:
     pop esi
     pop edi
 .next:
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     dec ecx
     jnz .find_file
     xor eax,eax
@@ -146,7 +162,7 @@ fs_write_file:
     pop esi
     pop edi
 .next:
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     dec edx
     jnz .find_file_write
     ret
@@ -219,7 +235,7 @@ fs_change_dir:
     jnz .compare_dir
     pop esi
     pop edi
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     dec ecx
     jnz .find_dir
 .not_found:
@@ -259,7 +275,7 @@ fs_delete_entry:
     pop esi
     pop edi
 .next:
-    add edi,24
+    add edi, DIR_ENTRY_SIZE
     dec ecx
     jnz .find_del
     xor eax,eax

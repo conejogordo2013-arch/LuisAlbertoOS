@@ -90,12 +90,19 @@ rtl8139_init:
     ; Encender dispositivo
     OUTB (RTL8139_IO_BASE + RTL_CONFIG1), 0x00
 
-    ; Software reset
+    ; Software reset with timeout so optional hardware never blocks boot.
     OUTB (RTL8139_IO_BASE + RTL_CMD), 0x10
+    mov ecx, 0x10000
 .wait_reset:
     INB (RTL8139_IO_BASE + RTL_CMD)
     test al, 0x10
-    jnz .wait_reset
+    jz .reset_done
+    loop .wait_reset
+    mov dword [rtl8139_present], 0
+    popa
+    xor eax, eax
+    ret
+.reset_done:
 
     ; RX buffer
     OUTD (RTL8139_IO_BASE + RTL_RBSTART), RTL8139_RX_BUF
@@ -123,6 +130,8 @@ rtl8139_init:
 ; ==================================================================
 rtl8139_transmit:
     pusha
+    cmp dword [rtl8139_present], 1
+    jne .tx_done
 
     xor eax, eax
     mov al, [rtl_tx_id]
@@ -149,6 +158,7 @@ rtl8139_transmit:
     and al, 3
     mov [rtl_tx_id], al
 
+.tx_done:
     popa
     ret
 
@@ -158,6 +168,8 @@ rtl8139_transmit:
 ; ==================================================================
 rtl8139_receive:
     pusha
+    cmp dword [rtl8139_present], 1
+    jne .no_packet
 
     ; buffer vacío?
     INB (RTL8139_IO_BASE + RTL_CMD)
@@ -191,12 +203,13 @@ rtl8139_receive:
     mov dx, RTL8139_IO_BASE + RTL_CAPR
     out dx, ax
 
+    mov [esp+24], ecx      ; preserve ECX return value across popa
     popa
     ret
 
 .no_packet:
+    mov dword [esp+24], 0
     popa
-    xor ecx, ecx
     ret
 
 %endif
