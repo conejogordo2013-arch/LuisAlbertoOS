@@ -14,7 +14,7 @@ TASK_ZOMBIE  equ 4
 sched_task_count dd 0
 sched_current    dd 0
 sched_enabled    dd 0
-sched_preemptive dd 0 ; optional/experimental: keep disabled until full context frames exist
+sched_preemptive dd 0 ; stable cooperative mode by default
 sched_quantum    dd 10
 sched_switch_count dd 0
 sched_last_switch_from dd 0

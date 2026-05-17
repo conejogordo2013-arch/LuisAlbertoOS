@@ -24,11 +24,16 @@ FLAG_DIR    equ 2
 ROOT_PARENT equ 0xFF
 
 fs_init:
-    cmp dword [ata_present], 1
-    je .ata
+    ; The boot image is a floppy image, not an ATA disk.  Always start with
+    ; the RAM filesystem so the shell has reliable file commands on every
+    ; emulator/machine.  ATA remains an optional backend for future mounting,
+    ; but it is never required for boot or the terminal.
     call fs_init_ram
     ret
-.ata:
+
+fs_init_ata:
+    cmp dword [ata_present], 1
+    jne fs_init
     mov dword [fs_storage_mode], FS_MODE_ATA
     mov eax, DIR_LBA
     mov ebx, DIR_BUFFER
@@ -38,6 +43,8 @@ fs_init:
 fs_storage_mode dd FS_MODE_NONE
 fs_journal_seq dd 0
 fs_create_flag db 0
+fs_write_name_ptr dd 0
+fs_write_buf_ptr dd 0
 
 fs_init_ram:
     mov dword [fs_storage_mode], FS_MODE_RAM
@@ -105,6 +112,7 @@ fs_create_file:
     je .found
     add edi, DIR_ENTRY_SIZE
     loop .find_empty
+    xor eax, eax
     ret
 .found:
     push edi
@@ -135,6 +143,23 @@ fs_create_file:
     mov byte [edi+24], al ; flag
     mov byte [edi+25], 0 ; parent(root)
     call fs_save_dir
+    mov eax, 1
+    ret
+.name_done:
+    pop edi
+    mov eax, edi
+    sub eax, DIR_BUFFER
+    mov ebx, DIR_ENTRY_SIZE
+    xor edx,edx
+    div ebx
+    add eax, DATA_LBA
+    mov [edi+16], eax
+    mov dword [edi+20], 0
+    mov al, [fs_create_flag]
+    mov byte [edi+24], al
+    mov byte [edi+25], 0
+    call fs_save_dir
+    mov eax, 1
     ret
 .name_done:
     pop edi
@@ -212,6 +237,8 @@ fs_read_file:
 
 fs_write_file:
     mov ebp, ecx            ; preservar tamaño a guardar
+    mov [fs_write_name_ptr], esi
+    mov [fs_write_buf_ptr], ebx
     mov edi, DIR_BUFFER
     mov edx,16
 .find_file_write:
@@ -264,6 +291,17 @@ fs_write_file:
     add edi, DIR_ENTRY_SIZE
     dec edx
     jnz .find_file_write
+    ; Si el archivo no existe, crearlo y reintentar una vez.
+    mov esi, [fs_write_name_ptr]
+    mov al, FLAG_FILE
+    call fs_create_file
+    cmp eax, 0
+    je .fail_create
+    mov esi, [fs_write_name_ptr]
+    mov ebx, [fs_write_buf_ptr]
+    mov ecx, ebp
+    call fs_write_file
+.fail_create:
     ret
 
 fs_change_dir:
