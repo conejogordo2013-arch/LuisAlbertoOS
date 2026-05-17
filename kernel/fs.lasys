@@ -33,11 +33,18 @@ fs_init:
 
 fs_init_ata:
     cmp dword [ata_present], 1
-    jne fs_init
-    mov dword [fs_storage_mode], FS_MODE_ATA
+    jne .fail
     mov eax, DIR_LBA
     mov ebx, DIR_BUFFER
     call floppy_read_sector
+    cmp eax, 1
+    jne .fail
+    mov dword [fs_storage_mode], FS_MODE_ATA
+    mov eax, 1
+    ret
+.fail:
+    call fs_init_ram
+    xor eax, eax
     ret
 
 fs_storage_mode dd FS_MODE_NONE

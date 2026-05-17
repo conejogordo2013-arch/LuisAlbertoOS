@@ -747,9 +747,9 @@ do_change:
     call api_print_string
     jmp shell_loop
 .to_ata:
-    cmp dword [ata_present], 1
-    jne .ata_missing
     call fs_init_ata
+    cmp eax, 1
+    jne .ata_missing
     mov dword [fs_driver_available], 1
     mov esi, msg_change_ata_ok
     call api_print_string
