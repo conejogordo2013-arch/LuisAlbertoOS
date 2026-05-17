@@ -12,8 +12,11 @@ oskrnl_main:
     call interrupts_init
     call mem_init
     call paging_init
+    call scheduler_init
 
     mov esi, msg_mem_ready
+    call api_print_string
+    mov esi, msg_sched_ready
     call api_print_string
 
     ; Inicializar drivers opcionales
@@ -44,6 +47,7 @@ oskrnl_main:
     call ac97_beep
 .audio_done:
 
+    call scheduler_register_kernel_main
     call shell_start
     ret
 
@@ -52,3 +56,4 @@ msg_fs_missing db 0x0A,"[WARN] Dispositivo ATA no detectado. Comandos de archivo
 msg_net_missing db 0x0A,"[WARN] RTL8139 no detectado. Comandos de red no disponibles.",0
 msg_audio_missing db 0x0A,"[WARN] AC97 no detectado. Comandos de audio no disponibles.",0
 msg_mem_ready db 0x0A,"[OK] Memoria/Interrupciones inicializadas.",0
+msg_sched_ready db 0x0A,"[OK] Scheduler round-robin inicializado.",0

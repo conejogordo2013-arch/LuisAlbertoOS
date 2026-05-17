@@ -1,17 +1,227 @@
 ; ==================================================================
-; interrupts.lasys - IDT básica + stubs IRQ/PIC
+; interrupts.lasys - IDT + PIC + IRQ0 + syscall int80 base
 ; ==================================================================
 %ifndef INTERRUPTS_LASYS
 %define INTERRUPTS_LASYS
 
+IDT_BASE equ 0xA800
+
 idt_ptr:
-    dw 0
-    dd 0
+    dw 256*8-1
+    dd IDT_BASE
 interrupts_ready dd 0
+irq_ticks dd 0
+scheduler_ticks dd 0
+irq1_keys dd 0
+exception_count dd 0
+last_exception  dd 0
+syscall_count   dd 0
+
+%macro SET_IDT 2
+    mov eax, %1
+    mov word [IDT_BASE + (%2*8)], ax
+    mov word [IDT_BASE + (%2*8) + 2], 0x08
+    mov byte [IDT_BASE + (%2*8) + 4], 0
+    mov byte [IDT_BASE + (%2*8) + 5], 0x8E
+    shr eax, 16
+    mov word [IDT_BASE + (%2*8) + 6], ax
+%endmacro
+
+%macro SET_IDT_USER 2
+    mov eax, %1
+    mov word [IDT_BASE + (%2*8)], ax
+    mov word [IDT_BASE + (%2*8) + 2], 0x08
+    mov byte [IDT_BASE + (%2*8) + 4], 0
+    mov byte [IDT_BASE + (%2*8) + 5], 0xEE
+    shr eax, 16
+    mov word [IDT_BASE + (%2*8) + 6], ax
+%endmacro
 
 interrupts_init:
-    ; En esta etapa base dejamos un marcador estable para shell/diagnóstico
-    mov dword [interrupts_ready], 1
+    pusha
+    mov edi, IDT_BASE
+    mov ecx, 256*8/4
+    xor eax,eax
+    rep stosd
+
+    SET_IDT isr_exc0, 0
+    SET_IDT isr_exc1, 1
+    SET_IDT isr_exc2, 2
+    SET_IDT isr_exc3, 3
+    SET_IDT isr_exc4, 4
+    SET_IDT isr_exc5, 5
+    SET_IDT isr_exc6, 6
+    SET_IDT isr_exc7, 7
+    SET_IDT isr_exc8, 8
+    SET_IDT isr_exc9, 9
+    SET_IDT isr_exc10, 10
+    SET_IDT isr_exc11, 11
+    SET_IDT isr_exc12, 12
+    SET_IDT isr_exc13, 13
+    SET_IDT isr_exc14, 14
+    SET_IDT isr_exc15, 15
+    SET_IDT isr_exc16, 16
+    SET_IDT isr_exc17, 17
+    SET_IDT isr_exc18, 18
+    SET_IDT isr_exc19, 19
+    SET_IDT isr_irq0, 32
+    SET_IDT isr_irq1, 33
+    SET_IDT_USER isr_syscall80, 128
+
+    ; PIC remap 0x20/0x28
+    mov al,0x11
+    out 0x20,al
+    out 0xA0,al
+    mov al,0x20
+    out 0x21,al
+    mov al,0x28
+    out 0xA1,al
+    mov al,0x04
+    out 0x21,al
+    mov al,0x02
+    out 0xA1,al
+    mov al,0x01
+    out 0x21,al
+    out 0xA1,al
+
+    ; Unmask IRQ0 + IRQ1 (teclado)
+    mov al,0xFC
+    out 0x21,al
+    mov al,0xFF
+    out 0xA1,al
+
+    ; PIT @100Hz
+    mov al,0x36
+    out 0x43,al
+    mov ax,11931
+    out 0x40,al
+    mov al,ah
+    out 0x40,al
+
+    lidt [idt_ptr]
+    sti
+    mov dword [interrupts_ready],1
+    popa
     ret
+
+
+%macro EXC_STUB 2
+%1:
+    pusha
+    inc dword [exception_count]
+    mov dword [last_exception], %2
+    popa
+    iretd
+%endmacro
+
+EXC_STUB isr_exc0, 0
+EXC_STUB isr_exc1, 1
+EXC_STUB isr_exc2, 2
+EXC_STUB isr_exc3, 3
+EXC_STUB isr_exc4, 4
+EXC_STUB isr_exc5, 5
+EXC_STUB isr_exc6, 6
+EXC_STUB isr_exc7, 7
+EXC_STUB isr_exc8, 8
+EXC_STUB isr_exc9, 9
+EXC_STUB isr_exc10, 10
+EXC_STUB isr_exc11, 11
+EXC_STUB isr_exc12, 12
+EXC_STUB isr_exc13, 13
+EXC_STUB isr_exc14, 14
+EXC_STUB isr_exc15, 15
+EXC_STUB isr_exc16, 16
+EXC_STUB isr_exc17, 17
+EXC_STUB isr_exc18, 18
+EXC_STUB isr_exc19, 19
+
+isr_irq0:
+    pusha
+    inc dword [irq_ticks]
+    inc dword [scheduler_ticks]
+    call scheduler_on_tick
+    ; EOI
+    mov al,0x20
+    out 0x20,al
+    popa
+    iretd
+
+isr_irq1:
+    pusha
+    in al,0x60
+    inc dword [irq1_keys]
+    mov al,0x20
+    out 0x20,al
+    popa
+    iretd
+
+isr_syscall80:
+    pusha
+    inc dword [syscall_count]
+    ; EAX=syscall
+    cmp eax,1
+    je .sys_puts
+    cmp eax,2
+    je .sys_ticks
+    cmp eax,3
+    je .sys_alloc
+    cmp eax,4
+    je .sys_yield
+    cmp eax,5
+    je .sys_getpid
+    cmp eax,6
+    je .sys_exit
+    cmp eax,7
+    je .sys_taskstat
+    jmp .done
+.sys_puts:
+    ; EBX = ptr null-term string
+    mov esi, ebx
+    call api_print_string
+    xor eax,eax
+    jmp .done
+.sys_ticks:
+    mov eax, [irq_ticks]
+    mov [esp+28], eax
+    jmp .done
+.sys_alloc:
+    mov ecx, ebx
+    call kmalloc
+    mov [esp+28], eax
+    jmp .done
+.sys_yield:
+    call scheduler_yield
+    xor eax,eax
+    mov [esp+28], eax
+    jmp .done
+.sys_getpid:
+    mov eax, [sched_current]
+    mov [esp+28], eax
+    jmp .done
+.sys_exit:
+    mov eax, [sched_current]
+    mov edi, sched_tcbs
+    imul ecx, eax, TCB_SIZE
+    add edi, ecx
+    mov dword [edi+36], TASK_ZOMBIE
+    xor eax,eax
+    mov [esp+28], eax
+    jmp .done
+.sys_taskstat:
+    mov eax, ebx
+    cmp eax, [sched_task_count]
+    jae .sys_taskstat_fail
+    mov edi, sched_tcbs
+    imul ecx, eax, TCB_SIZE
+    add edi, ecx
+    mov eax, [edi+36]
+    mov [esp+28], eax
+    jmp .done
+.sys_taskstat_fail:
+    mov eax, 0xFFFFFFFF
+    mov [esp+28], eax
+.done:
+    popa
+    iretd
 
 %endif

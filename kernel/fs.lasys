@@ -1,7 +1,7 @@
 ; ------------------------------------------------------------------
 ; fs.lasys - Minimal Flat Filesystem REAL
 ; Directory LBA: 30. Máx 16 archivos
-; Entry: 16 bytes nombre, 4 bytes LBA, 4 bytes tamaño, 1 byte flags
+; Entry: 16 bytes nombre, 4 bytes LBA, 4 bytes tamaño, 1 byte flags, 1 byte parent
 ; ------------------------------------------------------------------
 
 %ifndef FS_LASYS
@@ -16,6 +16,7 @@ APP_POINTER equ 0x7000  ; Puntero a app cargada
 ; FLAGS
 FLAG_FILE   equ 1
 FLAG_DIR    equ 2
+ROOT_PARENT equ 0xFF
 
 fs_init:
     mov eax, DIR_LBA
@@ -23,7 +24,10 @@ fs_init:
     call floppy_read_sector
     ret
 
+fs_journal_seq dd 0
+
 fs_save_dir:
+    inc dword [fs_journal_seq]
     mov eax, DIR_LBA
     mov ebx, DIR_BUFFER
     call floppy_write_sector
@@ -64,6 +68,7 @@ fs_create_file:
     mov [edi+16], eax   ; LBA
     mov dword [edi+20], 0 ; tamaño
     mov byte [edi+24], ah ; flag
+    mov byte [edi+25], 0 ; parent(root)
     call fs_save_dir
     ret
 
@@ -244,7 +249,7 @@ fs_delete_entry:
 .match:
     pop esi
     pop edi
-    mov ecx,24
+    mov ecx,26
     xor eax,eax
     rep stosb
     call fs_save_dir
