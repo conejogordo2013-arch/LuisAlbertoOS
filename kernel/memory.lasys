@@ -10,7 +10,8 @@ FRAME_BITMAP_BYTES   equ TOTAL_FRAMES/8
 FRAME_BITMAP         equ 0xA000          ; zona baja libre para bitmap
 KHEAP_START          equ 0x100000
 KHEAP_SIZE           equ 0x20000         ; 128KB
-RESERVED_FRAMES      equ (KHEAP_START + KHEAP_SIZE) / PAGE_SIZE
+RESERVED_END         equ 0x130000        ; includes heap + optional device DMA buffers
+RESERVED_FRAMES      equ RESERVED_END / PAGE_SIZE
 RESERVED_BITMAP_BYTES equ RESERVED_FRAMES / 8
 PAGE_DIR_BASE        equ 0xB000
 PAGE_TABLE0_BASE     equ 0xC000

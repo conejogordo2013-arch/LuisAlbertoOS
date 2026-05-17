@@ -1089,7 +1089,9 @@ net_cmd_send:
     call char_to_hex
     cmp ah, 1
     je .send_err
-    or al, bl            
+    or al, bl
+    cmp ecx, 1518
+    jae .send_err         ; Evitar desbordar el buffer TX
     mov [edi], al
     inc esi
     inc edi

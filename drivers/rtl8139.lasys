@@ -28,8 +28,8 @@ RTL_CONFIG1    equ 0x52
 ; =========================
 ; BUFFERS
 ; =========================
-RTL8139_RX_BUF equ 0x80000     ; 8KB RX buffer
-RTL8139_TX_BUF equ 0x90000     ; TX buffer
+RTL8139_RX_BUF equ 0x120000    ; 8KB RX buffer (reserved in memory.lasys)
+RTL8139_TX_BUF equ 0x124000    ; TX buffer (reserved in memory.lasys)
 
 ; =========================
 ; VARIABLES
