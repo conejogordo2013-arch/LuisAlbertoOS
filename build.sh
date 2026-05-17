@@ -8,15 +8,33 @@ command -v dd >/dev/null 2>&1 || { echo "Error: dd is required to build LuisAlbe
 
 mkdir -p boot kernel apps drivers libs bin
 
+# Disk layout (LBA sectors, 512 bytes each):
+#   0       boot sector
+#   1..40   kernel load window read by boot/LABootL.asm (40 sectors)
+#   64..    apps and optional demo data, safely outside the kernel window
+KERNEL_LOAD_SECTORS=40
+KERNEL_START_LBA=1
+APP_SAMPLE_LBA=64
+APP_TEXTEDIT_LBA=66
+APP_TASKMGR_LBA=68
+APP_LATEXTEDIT_LBA=70
+FS_DIR_LBA=96
+FS_DATA_LBA=97
+
 # 1. Bootloader and kernel
 nasm -f bin boot/LABootL.asm -o bin/boot.bin
 nasm -f bin kernel/LAKernel.asm -o bin/kernel.bin
 
-# The bootloader currently reads 40 sectors (20 KiB) starting at sector 2.
 kernel_size=$(wc -c < bin/kernel.bin)
-max_kernel_size=$((40 * 512))
+max_kernel_size=$((KERNEL_LOAD_SECTORS * 512))
+kernel_end_lba=$((KERNEL_START_LBA + KERNEL_LOAD_SECTORS))
+first_payload_lba=$APP_SAMPLE_LBA
 if (( kernel_size > max_kernel_size )); then
     echo "Error: kernel.bin is ${kernel_size} bytes; bootloader limit is ${max_kernel_size} bytes." >&2
+    exit 1
+fi
+if (( first_payload_lba < kernel_end_lba )); then
+    echo "Error: payload LBA ${first_payload_lba} overlaps kernel load window ending before LBA ${kernel_end_lba}." >&2
     exit 1
 fi
 
@@ -31,28 +49,29 @@ dd if=/dev/zero of=LuisAlbertoOS.img bs=512 count=2880 status=none
 
 # 4. Bootloader and kernel
 dd if=bin/boot.bin of=LuisAlbertoOS.img conv=notrunc status=none
-dd if=bin/kernel.bin of=LuisAlbertoOS.img seek=1 conv=notrunc status=none
+dd if=bin/kernel.bin of=LuisAlbertoOS.img seek=${KERNEL_START_LBA} conv=notrunc status=none
 
-# 5. Apps (manual sectors)
-dd if=bin/sample1.laa    of=LuisAlbertoOS.img seek=19 conv=notrunc status=none
-dd if=bin/textedit.laa   of=LuisAlbertoOS.img seek=21 conv=notrunc status=none
-dd if=bin/taskmgr.laa    of=LuisAlbertoOS.img seek=23 conv=notrunc status=none
-dd if=bin/LATextedit.laa of=LuisAlbertoOS.img seek=25 conv=notrunc status=none
+# 5. Apps (manual sectors outside the kernel load window)
+dd if=bin/sample1.laa    of=LuisAlbertoOS.img seek=${APP_SAMPLE_LBA} conv=notrunc status=none
+dd if=bin/textedit.laa   of=LuisAlbertoOS.img seek=${APP_TEXTEDIT_LBA} conv=notrunc status=none
+dd if=bin/taskmgr.laa    of=LuisAlbertoOS.img seek=${APP_TASKMGR_LBA} conv=notrunc status=none
+dd if=bin/LATextedit.laa of=LuisAlbertoOS.img seek=${APP_LATEXTEDIT_LBA} conv=notrunc status=none
 
 # 6. Mock FS directory (optional demo data). Entry size: 26 bytes.
-python3 - <<'PY'
+FS_DATA_LBA=${FS_DATA_LBA} python3 - <<'PY'
+import os
 from pathlib import Path
 entry = bytearray(512)
 name = b"test.txt"
 entry[0:len(name)] = name
-entry[16:20] = (31).to_bytes(4, "little")
+entry[16:20] = int(os.environ["FS_DATA_LBA"]).to_bytes(4, "little")
 entry[20:24] = (15).to_bytes(4, "little")
 entry[24] = 1  # FLAG_FILE
 entry[25] = 0  # root parent
 Path("bin/mock_dir.bin").write_bytes(entry)
 PY
-dd if=bin/mock_dir.bin of=LuisAlbertoOS.img seek=30 conv=notrunc status=none
+dd if=bin/mock_dir.bin of=LuisAlbertoOS.img seek=${FS_DIR_LBA} conv=notrunc status=none
 printf 'Hello from FS!\n\0' > bin/mock_test.txt
-dd if=bin/mock_test.txt of=LuisAlbertoOS.img seek=31 conv=notrunc status=none
+dd if=bin/mock_test.txt of=LuisAlbertoOS.img seek=${FS_DATA_LBA} conv=notrunc status=none
 
 echo "Build complete."
