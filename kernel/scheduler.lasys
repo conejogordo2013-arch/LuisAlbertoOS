@@ -14,6 +14,7 @@ TASK_ZOMBIE  equ 4
 sched_task_count dd 0
 sched_current    dd 0
 sched_enabled    dd 0
+sched_preemptive dd 0 ; stable cooperative mode by default
 sched_quantum    dd 10
 sched_switch_count dd 0
 sched_last_switch_from dd 0
@@ -26,6 +27,7 @@ scheduler_init:
     mov dword [sched_task_count], 1
     mov dword [sched_current], 0
     mov dword [sched_enabled], 1
+    mov dword [sched_preemptive], 0
     mov dword [sched_last_switch_from], 0
     mov dword [sched_last_switch_to], 0
     ret
@@ -38,11 +40,18 @@ scheduler_register_kernel_main:
     ret
 
 scheduler_on_tick:
+    ; Keep timer accounting enabled, but do not preemptively swap stacks yet.
+    ; The demo scheduler can register/block/wake tasks, while real stack
+    ; switching remains optional until complete interrupt return frames exist.
     cmp dword [sched_enabled], 1
+    jne .done
+    cmp dword [sched_preemptive], 1
     jne .done
     mov eax, [irq_ticks]
     xor edx, edx
     mov ecx, [sched_quantum]
+    test ecx, ecx
+    jz .done
     div ecx
     cmp edx, 0
     jne .done
@@ -51,7 +60,10 @@ scheduler_on_tick:
     ret
 
 scheduler_yield:
-    ; RR con guardado/restaurado de ESP por tarea (base multitarea real)
+    ; Cooperative accounting only unless preemption is explicitly enabled.
+    ; This avoids switching to an unprepared demo stack from IRQ0.
+    cmp dword [sched_preemptive], 1
+    jne .ret
     mov eax, [sched_current]
     mov edi, sched_tcbs
     imul ecx, eax, TCB_SIZE
@@ -79,6 +91,7 @@ scheduler_yield:
     jne .next
     jmp .ret
 .switch:
+    mov eax, [sched_current]
     mov [sched_last_switch_from], eax
     mov [sched_last_switch_to], ebx
     mov [sched_current], ebx

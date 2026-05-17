@@ -19,14 +19,13 @@ oskrnl_main:
     mov esi, msg_sched_ready
     call api_print_string
 
-    ; Inicializar drivers opcionales
+    ; Inicializar almacenamiento. La terminal usa RAM FS por defecto para
+    ; arrancar igual aunque no exista ATA/IDE. El driver ATA se sondea solo
+    ; como dispositivo opcional y nunca bloquea comandos de archivos.
     call floppy_probe
-    mov [fs_driver_available], eax
-    cmp eax, 0
-    jne .fs_ok
-    mov esi, msg_fs_missing
+    mov dword [fs_driver_available], 1
+    mov esi, msg_fs_ram
     call api_print_string
-.fs_ok:
 
     call rtl8139_init
     mov [net_driver_available], eax
@@ -52,7 +51,7 @@ oskrnl_main:
     ret
 
 welcome_msg db "Welcome to LuisAlbertoOS Core v1.0 Compilation 1.2026.3.25.5p.51", 0
-msg_fs_missing db 0x0A,"[WARN] Dispositivo ATA no detectado. Comandos de archivos no disponibles.",0
+msg_fs_ram db 0x0A,"[OK] Filesystem RAM activo. ATA queda como dispositivo opcional.",0
 msg_net_missing db 0x0A,"[WARN] RTL8139 no detectado. Comandos de red no disponibles.",0
 msg_audio_missing db 0x0A,"[WARN] AC97 no detectado. Comandos de audio no disponibles.",0
 msg_mem_ready db 0x0A,"[OK] Memoria/Interrupciones inicializadas.",0
