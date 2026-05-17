@@ -161,6 +161,21 @@ fs_create_file:
     call fs_save_dir
     mov eax, 1
     ret
+.name_done:
+    pop edi
+    mov eax, edi
+    sub eax, DIR_BUFFER
+    mov ebx, DIR_ENTRY_SIZE
+    xor edx,edx
+    div ebx
+    add eax, DATA_LBA
+    mov [edi+16], eax
+    mov dword [edi+20], 0
+    mov al, [fs_create_flag]
+    mov byte [edi+24], al
+    mov byte [edi+25], 0
+    call fs_save_dir
+    ret
 
 fs_read_file:
     mov edi, DIR_BUFFER
