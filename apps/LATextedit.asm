@@ -1,4 +1,5 @@
 [BITS 32]
+[ORG 0x4000]
 
 ; =========================
 ; API OFFSETS (ABI)
@@ -15,28 +16,32 @@ API_READ_FILE    equ 24
 ; CONFIG
 ; =========================
 FILE_BUFFER     equ 0x6000
-MAX_FILE_SIZE   equ 4096
+MAX_FILE_SIZE   equ 511
 
 start:
-    ; Guardar puntero al nombre del archivo
+    ; EBX = API table, ESI = filename pointer (set by launcher/kernel)
+    mov [api_ptr], ebx
     mov [filename_ptr], esi
+
+    mov esi, msg_title
+    call [ebx + API_PRINT_STRING]
 
     ; Inicializar buffer
     mov edi, FILE_BUFFER
     xor ecx, ecx
 
 .edit_loop:
-    ; Leer teclado
+    mov ebx, [api_ptr]
     call [ebx + API_KBD_READ]
 
     cmp al, 0
     je .edit_loop
 
-    ; CTRL+C → guardar
+    ; CTRL+C -> guardar
     cmp al, 0x03
     je .save_exit
 
-    ; CTRL+X → salir sin guardar
+    ; CTRL+X -> salir sin guardar
     cmp al, 0x18
     je .abort_exit
 
@@ -44,14 +49,7 @@ start:
     cmp al, 0x08
     je .handle_backspace
 
-    ; ENTER
-    cmp al, 0x0D
-    je .handle_enter
-
-    jmp .insert_char
-
-.handle_enter:
-    mov al, 0x0A
+    ; ENTER/line feed is already 0x0A in the kernel keyboard API
     jmp .insert_char
 
 .handle_backspace:
@@ -60,8 +58,10 @@ start:
 
     dec edi
     dec ecx
+    mov byte [edi], 0
 
     ; borrar visual REAL
+    mov ebx, [api_ptr]
     mov al, 0x08
     call [ebx + API_PRINT_CHAR]
     mov al, ' '
@@ -79,6 +79,7 @@ start:
     inc edi
     inc ecx
 
+    mov ebx, [api_ptr]
     call [ebx + API_PRINT_CHAR]
     jmp .edit_loop
 
@@ -87,18 +88,19 @@ start:
     mov byte [edi], 0x00
     inc ecx
 
-    ; preparar llamada FS
+    ; preparar llamada FS: ESI=filename, EBX=buffer, ECX=size
     mov esi, [filename_ptr]
     mov ebx, FILE_BUFFER
+    mov edx, [api_ptr]
+    call [edx + API_WRITE_FILE]
 
-    call [ebx + API_WRITE_FILE]
-
-    ; mensaje
+    mov ebx, [api_ptr]
     mov esi, msg_saved
     call [ebx + API_PRINT_STRING]
     ret
 
 .abort_exit:
+    mov ebx, [api_ptr]
     mov esi, msg_exit
     call [ebx + API_PRINT_STRING]
     ret
@@ -106,7 +108,9 @@ start:
 ; =========================
 ; DATA
 ; =========================
+api_ptr dd 0
 filename_ptr dd 0
 
+msg_title db 0x0A, "LATextEdit: Ctrl+C guarda, Ctrl+X sale.", 0x0A, 0
 msg_saved db 0x0A, "[Saved]", 0x0A, 0
 msg_exit  db 0x0A, "[Exit]", 0x0A, 0
