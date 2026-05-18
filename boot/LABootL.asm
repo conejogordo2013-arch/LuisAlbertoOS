@@ -4,7 +4,8 @@
 KERNEL_LOAD_SEG  equ 0x0000
 KERNEL_LOAD_OFF  equ 0x1000
 KERNEL_SECTORS   equ 80
-SECTORS_PER_TRK  equ 18
+DEFAULT_SPT      equ 18
+DEFAULT_HEADS    equ 2
 
 start:
     cli
@@ -13,8 +14,27 @@ start:
     mov es, ax
     mov ss, ax
     mov sp, 0x7C00
-    sti
+    ; Keep IRQs masked during early boot. BIOS INT calls still work with IF=0
+    ; and this avoids random hardware IRQ handlers stomping our tiny stack.
     mov [boot_drive], dl
+    mov byte [sectors_per_trk], DEFAULT_SPT
+    mov byte [heads_count], DEFAULT_HEADS
+
+    ; Query BIOS drive geometry so CHS stepping works for floppy and HDD.
+    ; If the BIOS call fails we keep conservative floppy defaults.
+    mov ah, 0x08
+    mov dl, [boot_drive]
+    int 0x13
+    jc .geom_done
+    and cl, 0x3F
+    cmp cl, 1
+    jb .geom_done
+    mov [sectors_per_trk], cl
+    inc dh
+    cmp dh, 1
+    jb .geom_done
+    mov [heads_count], dh
+.geom_done:
 
     ; Print Boot Message
     mov si, boot_msg
@@ -53,13 +73,17 @@ load_kernel:
     add bx, 512
     dec byte [sectors_left]
     inc byte [disk_sector]
-    cmp byte [disk_sector], SECTORS_PER_TRK + 1
+    mov al, [sectors_per_trk]
+    inc al
+    cmp byte [disk_sector], al
     jb .read_loop
 
     mov byte [disk_sector], 1
-    xor byte [disk_head], 1
-    cmp byte [disk_head], 1
-    je .read_loop
+    inc byte [disk_head]
+    mov al, [heads_count]
+    cmp byte [disk_head], al
+    jb .read_loop
+    mov byte [disk_head], 0
     inc byte [disk_cylinder]
     jmp .read_loop
 
@@ -90,6 +114,8 @@ disk_cylinder db 0
 disk_head db 0
 disk_sector db 0
 sectors_left db 0
+sectors_per_trk db DEFAULT_SPT
+heads_count db DEFAULT_HEADS
 
 times 510-($-$$) db 0
 dw 0xAA55
