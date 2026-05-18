@@ -88,3 +88,5 @@ user_entry_stub:
     jmp .user_loop
 
 user_msg db 0x0A, "[RING3] User stub activo via int80.",0
+
+kernel_image_end:
