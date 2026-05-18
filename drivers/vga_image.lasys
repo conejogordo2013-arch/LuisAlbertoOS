@@ -6,7 +6,7 @@
 %define VGA_IMAGE_LASYS
 
 VGA_VRAM    equ 0xA0000
-BMP_LOAD_AD equ 0x7000  ; Definido como APP_POINTER en fs.lasys
+BMP_LOAD_AD equ APP_POINTER  ; buffer de carga multi-sector definido en fs.lasys
 
 vga_image_view:
     ; 1. Cambiar a Modo Gráfico 13h (320x200x256) programando puertos VGA

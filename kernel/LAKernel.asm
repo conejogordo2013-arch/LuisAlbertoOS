@@ -1,6 +1,7 @@
 [BITS 16]
 [ORG 0x1000]
 
+kernel_image_start:
 kernel_entry:
     cli                     ; Disable interrupts (Crucial for PM switch)
     
@@ -63,6 +64,7 @@ gdt_descriptor:
 %include "drivers/rtl8139.lasys"   ; <--- Añadir Driver de Red
 %include "kernel/net.lasys"        ; <--- Añadir Pila de Red
 %include "drivers/ac97.lasys"
+%include "drivers/sb16.lasys"
 
 %include "kernel/interrupts.lasys"
 
@@ -85,3 +87,4 @@ user_entry_stub:
     jmp .user_loop
 
 user_msg db 0x0A, "[RING3] User stub activo via int80.",0
+kernel_image_end:

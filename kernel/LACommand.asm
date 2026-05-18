@@ -16,16 +16,17 @@ shell_prompt      db "> ",0
 msg_welcome       db 0x0A,"LuisAlbertoOS Shell REAL v3.1 (Net Enabled)",0x0A,0
 msg_newline       db 0x0A,0
 
-cmd_buffer        times 64 db 0
+cmd_buffer        times 128 db 0
 char_buffer       db 0,0
 hex_buffer        times 9 db 0
 entry_name_buffer times 17 db 0
 arg_ptr           dd 0
+arg2_ptr          dd 0
 
 current_path      times 128 db 0
 path_root_init    db "C:/",0
 
-BUFFER_EDITOR     times 512 db 0 
+BUFFER_EDITOR     times FS_MAX_FILE_BYTES db 0
 
 ; Comandos Básicos
 cmd_dir       db "dir",0
@@ -35,6 +36,7 @@ cmd_mkdir     db "mkdir",0
 cmd_touch     db "touch",0
 cmd_edit      db "edit",0
 cmd_audio     db "audio",0
+cmd_play      db "play",0
 cmd_img       db "img",0
 cmd_help      db "help",0
 cmd_net       db "net",0
@@ -42,6 +44,7 @@ cmd_devices   db "devices",0
 cmd_beep      db "beep",0
 cmd_pwd       db "pwd",0
 cmd_meminfo   db "meminfo",0
+cmd_data      db "data",0
 cmd_alloc     db "alloc",0
 cmd_free      db "free",0
 cmd_rm        db "rm",0
@@ -59,6 +62,21 @@ cmd_tasks     db "tasks",0
 cmd_vmmap     db "vmmap",0
 cmd_vmunmap   db "vmunmap",0
 cmd_change    db "change",0
+cmd_echo      db "echo",0
+cmd_copy      db "copy",0
+cmd_move      db "move",0
+cmd_rename    db "rename",0
+cmd_type      db "type",0
+cmd_hexdump   db "hexdump",0
+cmd_date      db "date",0
+cmd_ver       db "ver",0
+cmd_reboot    db "reboot",0
+cmd_shutdown  db "shutdown",0
+cmd_run       db "run",0
+cmd_mount     db "mount",0
+cmd_umount    db "umount",0
+cmd_format    db "format",0
+cmd_set       db "set",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -81,13 +99,36 @@ net_sub_paginf    db "paginf",0
 
 ; Mensajes Básicos
 msg_err_cmd       db 0x0A,"Error: comando no reconocido.",0
+msg_usage_two     db 0x0A,"Uso: comando <origen> <destino>",0
+msg_copy_ok       db 0x0A,"Archivo copiado.",0
+msg_move_ok       db 0x0A,"Archivo movido/renombrado.",0
+msg_op_fail       db 0x0A,"Operacion fallida.",0
+msg_dump_hdr      db 0x0A,"Offset  Hex",0x0A,0
+msg_date_text     db 0x0A,"Fecha: 2026-05-18 UTC",0
+msg_ver_text      db 0x0A,"LuisAlbertoOS Shell REAL v3.2 multi-sector",0
+msg_rebooting     db 0x0A,"Reiniciando...",0
+msg_shutdown_text db 0x0A,"Sistema detenido. Puede cerrar el emulador.",0
+msg_mount_ok      db 0x0A,"Montaje activo.",0
+msg_umount_ok     db 0x0A,"Unidad desmontada (RAM FS sigue disponible).",0
+msg_format_ok     db 0x0A,"Filesystem formateado.",0
+msg_run_fail      db 0x0A,"App no encontrada. Usa sample1, taskmgr o textedit.",0
+msg_hist_note     db 0x0A,"Historial/autocompletado: buffer preparado; flechas extendidas dependen del teclado.",0
+msg_set_ok        db 0x0A,"Variable guardada.",0
+msg_set_usage     db 0x0A,"Uso: set <nombre> <valor> ; echo $nombre",0
+msg_arp_hdr       db 0x0A,"-- ARP table --",0x0A,0
+msg_arp_empty     db "(vacia)",0x0A,0
 msg_created_dir   db 0x0A,"Carpeta creada.",0
 msg_created_file  db 0x0A,"Archivo creado.",0
 msg_edit_info     db 0x0A,"--- EDITOR (ESC para guardar y salir) ---",0x0A,0
 msg_saved         db 0x0A,"Archivo guardado.",0
 msg_dir_header    db 0x0A,"-- DIRECTORIO ACTUAL --",0x0A,0
 msg_dir_type      db " <DIR>",0
-msg_audio     db 0x0A,"Audio: usa beep para probar salida sonora.",0
+msg_audio     db 0x0A,"Audio: SB16 WAV PCM si esta disponible; AC97/PIT beep como fallback.",0
+msg_play_usage db 0x0A,"Uso: play <archivo.wav> (PCM mono 8-bit)",0
+msg_play_ok    db 0x0A,"Reproduciendo WAV PCM por SB16.",0
+msg_play_fail  db 0x0A,"No se pudo reproducir: requiere SB16 y WAV PCM mono 8-bit.",0
+msg_sb16_stat  db 0x0A,"SB16 DSP: ",0
+msg_ac97_stat  db 0x0A,"AC97: ",0
 msg_err_img       db 0x0A,"Error: Archivo de imagen no encontrado o vacio.",0
 msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "dir    - Lista directorio",0x0A, \
@@ -97,6 +138,7 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "touch  - Crea archivo",0x0A, \
                 "edit   - Editor de archivos",0x0A, \
                 "audio  - Estado/prueba de audio",0x0A, \
+                "play   - Reproduce WAV PCM SB16",0x0A, \
                 "img    - Visualizador de imagen",0x0A, \
                 "net    - Subsistema de red (net help)",0x0A, \
                 "help   - Muestra esta ayuda",0x0A, \
@@ -104,10 +146,14 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "beep   - Prueba audio AC97",0x0A, \
                 "pwd    - Muestra ruta actual",0x0A, \
                 "meminfo- Estado memoria",0x0A, \
+                "data   - Diagnostico completo del sistema",0x0A, \
                 "alloc  - Reserva 4KB",0x0A, \
                 "free   - Libera ultimo frame",0x0A, \
                 "rm     - Elimina entrada",0x0A, \
-                "cat    - Muestra archivo",0x0A, \
+                "cat/type - Muestra archivo multi-sector",0x0A, \
+                "copy/move/rename - Gestion de archivos",0x0A, \
+                "hexdump- Volcado hexadecimal",0x0A, \
+                "echo/set/date/ver/run/mount/umount/format",0x0A, \
                 "irq    - Ver ticks IRQ0",0x0A, \
                 "sched  - Ver ticks scheduler",0x0A, \
                 "task   - Estado scheduler",0x0A, \
@@ -170,6 +216,26 @@ msg_dev_ok        db "OK",0
 msg_dev_ram       db "RAM FS",0
 msg_dev_missing   db "NO DETECTADO",0
 msg_mem_hdr       db 0x0A,"Memoria kernel:",0x0A,0
+msg_data_hdr      db 0x0A,"== LuisAlbertoOS DATA ==",0x0A,0
+msg_data_boot     db 0x0A,"Bootloader:",0x0A,0
+msg_data_bootaddr db "Bootloader physical address: ",0
+msg_data_loadoff  db "Kernel load offset: ",0
+msg_data_total    db "Total Memory: ",0
+msg_data_kpa      db "Kernel physical address: ",0
+msg_data_kva      db "Kernel virtual address: ",0
+msg_data_kstart   db "KERNEL START: ",0
+msg_data_kend     db "KERNEL END: ",0
+msg_data_ksectors db "Kernel load sectors: ",0
+msg_data_malloc   db 0x0A,"Malloced Addresses:",0x0A,0
+msg_data_freed    db 0x0A,"Freed Addresses:",0x0A,0
+msg_data_heap     db "Heap ptr/end: ",0
+msg_data_last     db "Last/count: ",0
+msg_data_devices  db 0x0A,"Devices:",0x0A,0
+msg_data_tasks    db 0x0A,"TASKS:",0x0A,0
+msg_data_dump     db 0x0A,"Memory Dump:",0x0A,0
+msg_data_errors   db 0x0A,"Memory Errors Addresses:",0x0A,0
+msg_data_fs       db "FS mode/journal: ",0
+msg_data_irq      db "IRQ/syscalls: ",0
 msg_mem_total     db "Total bytes: ",0
 msg_mem_used      db 0x0A,"Usado bytes: ",0
 msg_mem_free      db 0x0A,"Libre bytes: ",0
@@ -220,6 +286,8 @@ arg_a             db "a:",0
 arg_c             db "c:",0
 arg_d             db "d:",0
 dot_char          db ".",0
+colon_char        db ":",0
+space_char        db " ",0
 msg_sw_from       db 0x0A,"Last from: ",0
 msg_sw_to         db 0x0A,"Last to: ",0
 msg_sched_on      db 0x0A,"Scheduler: ",0
@@ -234,6 +302,9 @@ hex_arg_ptr       dd 0
 net_pkts_sent     dd 0
 net_pkts_recv     dd 0
 net_errors        dd 0
+dump_size         dd 0
+shell_var_name    times 16 db 0
+shell_var_value   times 64 db 0
 
 ; ==================================================================
 ; INICIO DEL SHELL
@@ -261,7 +332,7 @@ shell_loop:
     call api_print_string
 
     mov edi, cmd_buffer
-    mov ecx, 64
+    mov ecx, 128
     xor eax, eax
     rep stosb
     mov edi, cmd_buffer
@@ -275,7 +346,7 @@ read_key:
     cmp al, 0x08
     je handle_backspace
 
-    cmp ecx, 62
+    cmp ecx, 126
     jge read_key
 
     mov [edi], al
@@ -299,6 +370,7 @@ parse_command:
     mov byte [edi], 0
     mov esi, cmd_buffer
     mov dword [arg_ptr], 0
+    mov dword [arg2_ptr], 0
 find_space:
     cmp byte [esi], 0
     je execute
@@ -310,6 +382,17 @@ split:
     mov byte [esi], 0
     inc esi
     mov dword [arg_ptr], esi
+find_space2:
+    cmp byte [esi], 0
+    je execute
+    cmp byte [esi], ' '
+    je split2
+    inc esi
+    jmp find_space2
+split2:
+    mov byte [esi], 0
+    inc esi
+    mov dword [arg2_ptr], esi
 
 execute:
     mov esi, cmd_buffer
@@ -351,6 +434,11 @@ execute:
     call strcmp
     cmp eax, 0
     je do_audio
+
+    mov edi, cmd_play
+    call strcmp
+    cmp eax, 0
+    je do_play
     
     mov edi, cmd_img
     call strcmp
@@ -381,6 +469,11 @@ execute:
     call strcmp
     cmp eax, 0
     je do_meminfo
+
+    mov edi, cmd_data
+    call strcmp
+    cmp eax, 0
+    je do_data
 
     mov edi, cmd_alloc
     call strcmp
@@ -466,6 +559,83 @@ execute:
     call strcmp
     cmp eax, 0
     je do_change
+
+
+
+    mov edi, cmd_echo
+    call strcmp
+    cmp eax, 0
+    je do_echo
+
+    mov edi, cmd_copy
+    call strcmp
+    cmp eax, 0
+    je do_copy
+
+    mov edi, cmd_move
+    call strcmp
+    cmp eax, 0
+    je do_move
+
+    mov edi, cmd_rename
+    call strcmp
+    cmp eax, 0
+    je do_rename
+
+    mov edi, cmd_type
+    call strcmp
+    cmp eax, 0
+    je do_cat
+
+    mov edi, cmd_hexdump
+    call strcmp
+    cmp eax, 0
+    je do_hexdump
+
+    mov edi, cmd_date
+    call strcmp
+    cmp eax, 0
+    je do_date
+
+    mov edi, cmd_ver
+    call strcmp
+    cmp eax, 0
+    je do_ver
+
+    mov edi, cmd_reboot
+    call strcmp
+    cmp eax, 0
+    je do_reboot
+
+    mov edi, cmd_shutdown
+    call strcmp
+    cmp eax, 0
+    je do_shutdown
+
+    mov edi, cmd_run
+    call strcmp
+    cmp eax, 0
+    je do_run
+
+    mov edi, cmd_mount
+    call strcmp
+    cmp eax, 0
+    je do_mount
+
+    mov edi, cmd_umount
+    call strcmp
+    cmp eax, 0
+    je do_umount
+
+    mov edi, cmd_format
+    call strcmp
+    cmp eax, 0
+    je do_format
+
+    mov edi, cmd_set
+    call strcmp
+    cmp eax, 0
+    je do_set
 
     ; --- INTEGRACIÓN DEL SUBSISTEMA DE RED ---
     mov edi, cmd_net
@@ -561,7 +731,7 @@ do_edit:
     mov esi, msg_edit_info
     call api_print_string
     mov edi, BUFFER_EDITOR
-    mov ecx, 512
+    mov ecx, FS_MAX_FILE_BYTES
     mov al, 0
     rep stosb
     mov edi, BUFFER_EDITOR
@@ -574,7 +744,7 @@ do_edit:
     je .edit_loop
     cmp al, 0x08         
     je .edit_backspace
-    cmp ecx, 511         
+    cmp ecx, FS_MAX_FILE_BYTES-1
     jge .edit_loop
     mov [edi], al
     inc edi
@@ -604,12 +774,55 @@ do_edit:
 do_audio:
     cmp dword [audio_driver_available], 0
     je .audio_no
-    call ac97_beep
     mov esi, msg_audio
     call api_print_string
+    mov esi, msg_sb16_stat
+    call api_print_string
+    mov eax, [sb16_driver_available]
+    call print_hex32
+    cmp dword [sb16_driver_available], 1
+    jne .beep_fallback
+    movzx eax, byte [sb16_dsp_major]
+    call print_hex32
+    movzx eax, byte [sb16_dsp_minor]
+    call print_hex32
+    jmp shell_loop
+.beep_fallback:
+    call ac97_beep
+    mov esi, msg_ac97_stat
+    call api_print_string
+    mov eax, [ac97_driver_available]
+    call print_hex32
     jmp shell_loop
 .audio_no:
     mov esi, msg_audio_unavail
+    call api_print_string
+    jmp shell_loop
+
+do_play:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .usage
+    cmp dword [sb16_driver_available], 1
+    jne .fail
+    call fs_read_file
+    cmp eax, 0
+    je .fail
+    mov esi, APP_POINTER
+    call sb16_play_wav
+    cmp eax, 0
+    je .fail
+    mov esi, msg_play_ok
+    call api_print_string
+    jmp shell_loop
+.usage:
+    mov esi, msg_play_usage
+    call api_print_string
+    jmp shell_loop
+.fail:
+    mov esi, msg_play_fail
     call api_print_string
     jmp shell_loop
 
@@ -701,7 +914,7 @@ do_beep:
 do_meminfo:
     mov esi, msg_mem_hdr
     call api_print_string
-    mov esi, msg_mem_total
+    mov esi, msg_data_total
     call api_print_string
     mov eax, [mem_total_bytes]
     call print_hex32
@@ -722,6 +935,176 @@ do_meminfo:
     call api_print_string
     mov eax, [paging_enabled]
     call print_hex32
+    jmp shell_loop
+
+
+do_data:
+    mov esi, msg_data_hdr
+    call api_print_string
+
+    mov esi, msg_data_boot
+    call api_print_string
+    mov esi, msg_data_bootaddr
+    call api_print_string
+    mov eax, 0x7C00
+    call print_hex32
+    mov esi, msg_data_loadoff
+    call api_print_string
+    mov eax, 0x1000
+    call print_hex32
+    mov esi, msg_data_ksectors
+    call api_print_string
+    mov eax, 60
+    call print_hex32
+    mov esi, msg_data_kpa
+    call api_print_string
+    mov eax, kernel_image_start
+    call print_hex32
+    mov esi, msg_data_kva
+    call api_print_string
+    mov eax, kernel_image_start
+    call print_hex32
+    mov esi, msg_data_kstart
+    call api_print_string
+    mov eax, kernel_image_start
+    call print_hex32
+    mov esi, msg_data_kend
+    call api_print_string
+    mov eax, kernel_image_end
+    call print_hex32
+
+    mov esi, msg_data_total
+    call api_print_string
+    mov eax, [mem_total_bytes]
+    call print_hex32
+    mov esi, msg_mem_used
+    call api_print_string
+    mov eax, [mem_used_bytes]
+    call print_hex32
+    mov esi, msg_mem_free
+    call api_print_string
+    mov eax, [mem_total_bytes]
+    sub eax, [mem_used_bytes]
+    call print_hex32
+
+    mov esi, msg_data_malloc
+    call api_print_string
+    mov esi, msg_data_heap
+    call api_print_string
+    mov eax, [heap_ptr]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [heap_end]
+    call print_hex32
+    mov esi, msg_data_last
+    call api_print_string
+    mov eax, [last_kmalloc_addr]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [last_kmalloc_size]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [kmalloc_count]
+    call print_hex32
+
+    mov esi, msg_data_freed
+    call api_print_string
+    mov esi, msg_data_last
+    call api_print_string
+    mov eax, [last_frame_free]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [frame_free_count]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [last_kfree_addr]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [kfree_count]
+    call print_hex32
+
+    mov esi, msg_data_devices
+    call api_print_string
+    mov esi, msg_dev_fs
+    call api_print_string
+    mov eax, [fs_driver_available]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov esi, msg_dev_net
+    call api_print_string
+    mov eax, [net_driver_available]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov esi, msg_dev_audio
+    call api_print_string
+    mov eax, [audio_driver_available]
+    call print_hex32
+    mov esi, msg_data_fs
+    call api_print_string
+    mov eax, [fs_storage_mode]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [fs_journal_seq]
+    call print_hex32
+
+    mov esi, msg_data_tasks
+    call api_print_string
+    mov esi, msg_sched_on
+    call api_print_string
+    mov eax, [sched_enabled]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [sched_preemptive]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [sched_task_count]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [sched_current]
+    call print_hex32
+
+    mov esi, msg_data_irq
+    call api_print_string
+    mov eax, [irq_ticks]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [irq1_keys]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [syscall_count]
+    call print_hex32
+
+    mov esi, msg_data_errors
+    call api_print_string
+    mov eax, [memory_error_addr]
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [memory_error_code]
+    call print_hex32
+
+    mov esi, msg_data_dump
+    call api_print_string
+    mov esi, kernel_image_start
+    mov ecx, 8
+    call print_dword_dump
+    mov esi, FRAME_BITMAP
+    mov ecx, 4
+    call print_dword_dump
     jmp shell_loop
 
 do_change:
@@ -875,7 +1258,6 @@ do_cat:
     call fs_read_file
     cmp eax, 0
     je .cat_fail
-    mov byte [APP_POINTER+511], 0
     mov esi, msg_cat_hdr
     call api_print_string
     mov esi, APP_POINTER
@@ -886,6 +1268,268 @@ do_cat:
     call api_print_string
     jmp shell_loop
 
+
+
+do_echo:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je shell_loop
+    cmp byte [esi], '$'
+    jne .literal
+    cmp byte [shell_var_name], 0
+    je .literal
+    inc esi
+    mov edi, shell_var_name
+    call strcmp
+    cmp eax, 0
+    jne .literal_from_arg
+    mov esi, msg_newline
+    call api_print_string
+    mov esi, shell_var_value
+    call api_print_string
+    jmp shell_loop
+.literal_from_arg:
+    mov esi, [arg_ptr]
+.literal:
+    mov esi, msg_newline
+    call api_print_string
+    mov esi, [arg_ptr]
+    call api_print_string
+    jmp shell_loop
+
+do_set:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .usage
+    mov ebx, [arg2_ptr]
+    cmp ebx, 0
+    je .usage
+    mov edi, shell_var_name
+    mov ecx, 15
+.copy_name:
+    lodsb
+    cmp al, 0
+    je .name_done
+    stosb
+    loop .copy_name
+.name_done:
+    mov byte [edi], 0
+    mov esi, [arg2_ptr]
+    mov edi, shell_var_value
+    mov ecx, 63
+.copy_value:
+    lodsb
+    cmp al, 0
+    je .value_done
+    stosb
+    loop .copy_value
+.value_done:
+    mov byte [edi], 0
+    mov esi, msg_set_ok
+    call api_print_string
+    jmp shell_loop
+.usage:
+    mov esi, msg_set_usage
+    call api_print_string
+    jmp shell_loop
+
+do_copy:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .usage
+    cmp dword [arg2_ptr], 0
+    je .usage
+    call fs_read_file
+    cmp eax, 0
+    je .fail
+    mov esi, [arg2_ptr]
+    mov ebx, APP_POINTER
+    call fs_write_file
+    cmp eax, 0
+    je .fail
+    mov esi, msg_copy_ok
+    call api_print_string
+    jmp shell_loop
+.usage:
+    mov esi, msg_usage_two
+    call api_print_string
+    jmp shell_loop
+.fail:
+    mov esi, msg_op_fail
+    call api_print_string
+    jmp shell_loop
+
+do_move:
+do_rename:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .usage
+    mov edi, [arg2_ptr]
+    cmp edi, 0
+    je .usage
+    call fs_rename_entry
+    cmp eax, 0
+    je .fail
+    mov esi, msg_move_ok
+    call api_print_string
+    jmp shell_loop
+.usage:
+    mov esi, msg_usage_two
+    call api_print_string
+    jmp shell_loop
+.fail:
+    mov esi, msg_op_fail
+    call api_print_string
+    jmp shell_loop
+
+do_hexdump:
+    cmp dword [fs_driver_available], 0
+    je fs_missing_cmd
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je shell_loop
+    call fs_read_file
+    cmp eax, 0
+    je .fail
+    mov esi, msg_dump_hdr
+    call api_print_string
+    mov [dump_size], ecx
+    xor ebx, ebx
+.dump_loop:
+    cmp ebx, [dump_size]
+    jae shell_loop
+    mov eax, ebx
+    call print_hex32_no_nl
+    mov al, ' '
+    call print_char
+    mov esi, APP_POINTER
+    add esi, ebx
+    movzx eax, byte [esi]
+    call print_hex8
+    mov esi, msg_newline
+    call api_print_string
+    inc ebx
+    jmp .dump_loop
+.fail:
+    mov esi, msg_cat_fail
+    call api_print_string
+    jmp shell_loop
+
+do_date:
+    mov esi, msg_date_text
+    call api_print_string
+    jmp shell_loop
+
+do_ver:
+    mov esi, msg_ver_text
+    call api_print_string
+    mov esi, msg_hist_note
+    call api_print_string
+    jmp shell_loop
+
+do_reboot:
+    mov esi, msg_rebooting
+    call api_print_string
+    mov al, 0xFE
+    out 0x64, al
+.hang:
+    hlt
+    jmp .hang
+
+do_shutdown:
+    mov esi, msg_shutdown_text
+    call api_print_string
+    cli
+.halt:
+    hlt
+    jmp .halt
+
+do_mount:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .ram
+    mov al, [esi]
+    cmp al, 'a'
+    jb .sel
+    cmp al, 'z'
+    ja .sel
+    sub al, 32
+.sel:
+    call storage_select_by_letter
+    cmp eax, 0
+    je .fail
+.ram:
+    call fs_init_ram
+    mov esi, msg_mount_ok
+    call api_print_string
+    jmp shell_loop
+.fail:
+    mov esi, msg_change_dev_no
+    call api_print_string
+    jmp shell_loop
+
+do_umount:
+    mov esi, msg_umount_ok
+    call api_print_string
+    jmp shell_loop
+
+do_format:
+    call fs_format
+    mov esi, msg_format_ok
+    call api_print_string
+    jmp shell_loop
+
+do_run:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .fail
+    mov edi, app_sample1_name
+    call strcmp
+    cmp eax, 0
+    je .sample1
+    mov esi, [arg_ptr]
+    mov edi, app_taskmgr_name
+    call strcmp
+    cmp eax, 0
+    je .taskmgr
+    mov esi, [arg_ptr]
+    mov edi, app_textedit_name
+    call strcmp
+    cmp eax, 0
+    je .textedit
+.fail:
+    mov esi, msg_run_fail
+    call api_print_string
+    jmp shell_loop
+.sample1:
+    mov eax, 64
+    mov ebx, 0x80000
+    call floppy_read_sector
+    mov ebx, api_table
+    call 0x80000
+    jmp shell_loop
+.textedit:
+    mov eax, 66
+    mov ebx, 0x81000
+    call floppy_read_sector
+    mov ebx, api_table
+    call 0x81000
+    jmp shell_loop
+.taskmgr:
+    mov eax, 68
+    mov ebx, 0x82000
+    call floppy_read_sector
+    mov ebx, api_table
+    call 0x82000
+    jmp shell_loop
+
+app_sample1_name db "sample1",0
+app_taskmgr_name db "taskmgr",0
+app_textedit_name db "textedit",0
 
 do_irq:
     mov esi, msg_irq_ticks
@@ -1251,6 +1895,7 @@ net_cmd_recv:
     cmp ecx, 0
     je shell_loop
     inc dword [net_pkts_recv]
+    call net_update_arp_from_last
     call print_packet_dump
     jmp shell_loop
 
@@ -1265,6 +1910,7 @@ net_cmd_listen:
     cmp ecx, 0
     je .continue_listen
     inc dword [net_pkts_recv]
+    call net_update_arp_from_last
     call print_packet_dump
 .continue_listen:
     call api_delay
@@ -1347,6 +1993,7 @@ net_cmd_ping:
 
 
 net_cmd_arp:
+    call print_arp_table
     call net_build_arp_request
     call rtl8139_transmit
     inc dword [net_pkts_sent]
@@ -1367,7 +2014,8 @@ net_cmd_icmp:
     call rtl8139_receive
     cmp ecx, 0
     je .icmp_none
-    mov esi, RTL8139_RX_BUF
+    call net_update_arp_from_last
+    mov esi, RTL8139_LAST_RX_BUF
     call net_parse_icmp_echo
     cmp eax, 1
     jne .icmp_none
@@ -1383,7 +2031,8 @@ net_cmd_l4:
     call rtl8139_receive
     cmp ecx, 0
     je .none
-    mov esi, RTL8139_RX_BUF
+    call net_update_arp_from_last
+    mov esi, RTL8139_LAST_RX_BUF
     call net_parse_l4
     cmp eax,1
     je .icmp
@@ -1497,6 +2146,50 @@ print_char:
     popa
     ret
 
+
+print_hex32_no_nl:
+    pusha
+    mov edi, hex_buffer
+    mov ecx, 8
+.hex_loop:
+    rol eax, 4
+    mov bl, al
+    and bl, 0x0F
+    cmp bl, 9
+    jle .digit
+    add bl, 55
+    jmp .store
+.digit:
+    add bl, 48
+.store:
+    mov [edi], bl
+    inc edi
+    loop .hex_loop
+    mov byte [edi], 0
+    mov esi, hex_buffer
+    call api_print_string
+    popa
+    ret
+
+print_hex8:
+    pusha
+    mov ah, al
+    shr al, 4
+    call .nibble
+    mov al, ah
+    and al, 0x0F
+    call .nibble
+    popa
+    ret
+.nibble:
+    cmp al, 9
+    jle .dig
+    add al, 55
+    jmp print_char
+.dig:
+    add al, 48
+    jmp print_char
+
 print_hex32:
     pusha
     mov edi, hex_buffer
@@ -1588,13 +2281,139 @@ char_to_hex:
     add al, 10
     ret
 
+print_mac:
+    ; ESI = 6-byte MAC
+    pusha
+    mov edi, esi
+    mov ecx, 6
+.mac_loop:
+    movzx eax, byte [edi]
+    call print_hex8
+    inc edi
+    dec ecx
+    jz .done
+    mov esi, colon_char
+    call api_print_string
+    jmp .mac_loop
+.done:
+    popa
+    ret
+
+print_arp_table:
+    pusha
+    mov esi, msg_arp_hdr
+    call api_print_string
+    mov edi, net_arp_table
+    mov ebx, 0
+    mov ecx, 4
+.row:
+    cmp dword [edi], 0
+    je .next
+    inc ebx
+    mov esi, edi
+    call print_ip4_inline
+    mov esi, space_char
+    call api_print_string
+    lea esi, [edi + 4]
+    call print_mac
+    mov esi, msg_newline
+    call api_print_string
+.next:
+    add edi, 10
+    loop .row
+    cmp ebx, 0
+    jne .done
+    mov esi, msg_arp_empty
+    call api_print_string
+.done:
+    popa
+    ret
+
+
+print_dword_dump:
+    ; ESI = address, ECX = dword count
+    pusha
+    mov edi, esi
+    mov ebx, ecx
+.dump_loop:
+    cmp ebx, 0
+    je .done
+    mov eax, edi
+    call print_hex32_no_nl
+    mov esi, space_char
+    call api_print_string
+    mov eax, [edi]
+    call print_hex32
+    add edi, 4
+    dec ebx
+    jmp .dump_loop
+.done:
+    popa
+    ret
+
 print_packet_dump:
+    pusha
     mov esi, msg_net_len
     call api_print_string
+    mov eax, [rtl_last_rx_len]
+    call print_hex32
     mov esi, msg_net_hex
     call api_print_string
+    mov ebx, 0
+.dump_hex:
+    cmp ebx, [rtl_last_rx_len]
+    jae .ascii
+    cmp ebx, 64
+    jae .ascii
+    mov esi, RTL8139_LAST_RX_BUF
+    add esi, ebx
+    movzx eax, byte [esi]
+    call print_hex8
+    mov al, ' '
+    call print_char
+    inc ebx
+    jmp .dump_hex
+.ascii:
     mov esi, msg_net_ascii
     call api_print_string
+    mov ebx, 0
+.dump_ascii:
+    cmp ebx, [rtl_last_rx_len]
+    jae .done
+    cmp ebx, 64
+    jae .done
+    mov esi, RTL8139_LAST_RX_BUF
+    add esi, ebx
+    mov al, [esi]
+    cmp al, 32
+    jb .dot
+    cmp al, 126
+    jbe .emit
+.dot:
+    mov al, '.'
+.emit:
+    call print_char
+    inc ebx
+    jmp .dump_ascii
+.done:
+    popa
+    ret
+
+print_ip4_inline:
+    pusha
+    mov edi, esi
+    mov ecx, 4
+.octet:
+    movzx eax, byte [edi]
+    call print_dec_u8
+    inc edi
+    dec ecx
+    jz .done
+    mov esi, dot_char
+    call api_print_string
+    jmp .octet
+.done:
+    popa
     ret
 
 print_ip4:

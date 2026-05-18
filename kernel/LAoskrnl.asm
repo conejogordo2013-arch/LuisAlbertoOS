@@ -1,6 +1,8 @@
 net_driver_available dd 0
 fs_driver_available  dd 0
 audio_driver_available dd 0
+sb16_driver_available dd 0
+ac97_driver_available dd 0
 
 oskrnl_main:
     call api_clear_screen
@@ -35,7 +37,17 @@ oskrnl_main:
     call api_print_string
 .net_ok:
 
+    call sb16_init
+    mov [sb16_driver_available], eax
+    cmp eax, 0
+    je .try_ac97
+    mov dword [audio_driver_available], 1
+    mov esi, msg_sb16_ready
+    call api_print_string
+    jmp .audio_done
+.try_ac97:
     call ac97_init
+    mov [ac97_driver_available], eax
     mov [audio_driver_available], eax
     cmp eax, 0
     jne .audio_ok
@@ -53,6 +65,7 @@ oskrnl_main:
 welcome_msg db "Welcome to LuisAlbertoOS Core v1.0 Compilation 1.2026.3.25.5p.51", 0
 msg_fs_ram db 0x0A,"[OK] Filesystem RAM activo. ATA queda como dispositivo opcional.",0
 msg_net_missing db 0x0A,"[WARN] RTL8139 no detectado. Comandos de red no disponibles.",0
-msg_audio_missing db 0x0A,"[WARN] AC97 no detectado. Comandos de audio no disponibles.",0
+msg_audio_missing db 0x0A,"[WARN] SB16/AC97 no detectado. Comandos de audio no disponibles.",0
+msg_sb16_ready db 0x0A,"[OK] SB16 detectado. DSP listo para WAV PCM.",0
 msg_mem_ready db 0x0A,"[OK] Memoria/Interrupciones inicializadas.",0
 msg_sched_ready db 0x0A,"[OK] Scheduler round-robin inicializado.",0

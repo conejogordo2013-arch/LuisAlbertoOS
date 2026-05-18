@@ -1,0 +1,248 @@
+; ==================================================================
+; sb16.lasys - Sound Blaster 16 DSP/DMA PCM playback
+; ==================================================================
+
+%ifndef SB16_LASYS
+%define SB16_LASYS
+
+global sb16_init
+global sb16_play_wav
+
+default_sb16_base equ 0x220
+SB16_RESET      equ default_sb16_base + 0x06
+SB16_READ       equ default_sb16_base + 0x0A
+SB16_WRITE      equ default_sb16_base + 0x0C
+SB16_READ_STAT  equ default_sb16_base + 0x0E
+SB16_IRQ_ACK16  equ default_sb16_base + 0x0F
+
+; ISA DMA channel 1 for 8-bit playback.
+DMA_MASK        equ 0x0A
+DMA_MODE        equ 0x0B
+DMA_CLEAR_FF    equ 0x0C
+DMA_CH1_ADDR    equ 0x02
+DMA_CH1_COUNT   equ 0x03
+DMA_CH1_PAGE    equ 0x83
+
+sb16_present dd 0
+sb16_dsp_major db 0
+sb16_dsp_minor db 0
+sb16_last_rate dd 0
+sb16_last_bits db 0
+sb16_last_channels db 0
+sb16_last_len dd 0
+sb16_last_status dd 0
+
+sb16_init:
+    call sb16_dsp_reset
+    cmp eax, 1
+    je .read_version
+    mov dword [sb16_present], 0
+    xor eax, eax
+    ret
+.read_version:
+    mov al, 0xE1
+    call sb16_dsp_write
+    call sb16_dsp_read
+    mov [sb16_dsp_major], al
+    call sb16_dsp_read
+    mov [sb16_dsp_minor], al
+    mov dword [sb16_present], 1
+    mov eax, 1
+    ret
+
+sb16_dsp_reset:
+    mov dx, SB16_RESET
+    mov al, 1
+    out dx, al
+    mov ecx, 0x1000
+.delay_on:
+    loop .delay_on
+    xor al, al
+    out dx, al
+    mov ecx, 0x10000
+.wait_ack:
+    mov dx, SB16_READ_STAT
+    in al, dx
+    test al, 0x80
+    jz .next_ack
+    mov dx, SB16_READ
+    in al, dx
+    cmp al, 0xAA
+    je .ok
+.next_ack:
+    loop .wait_ack
+    xor eax, eax
+    ret
+.ok:
+    mov eax, 1
+    ret
+
+sb16_dsp_write:
+    ; IN: AL = DSP command/data byte
+    push eax
+    mov ecx, 0x10000
+.wait:
+    mov dx, SB16_WRITE
+    in al, dx
+    test al, 0x80
+    jz .ready
+    loop .wait
+.ready:
+    pop eax
+    mov dx, SB16_WRITE
+    out dx, al
+    ret
+
+sb16_dsp_read:
+    mov ecx, 0x10000
+.wait:
+    mov dx, SB16_READ_STAT
+    in al, dx
+    test al, 0x80
+    jnz .ready
+    loop .wait
+    xor al, al
+    ret
+.ready:
+    mov dx, SB16_READ
+    in al, dx
+    ret
+
+sb16_program_dma8:
+    ; IN: ESI = physical sample address, ECX = sample byte length (1..65536)
+    pusha
+    mov eax, esi
+    mov ebx, ecx
+    dec ebx
+
+    ; Mask channel 1 while programming it.
+    mov dx, DMA_MASK
+    mov al, 0x05
+    out dx, al
+
+    ; Clear flip-flop and set single-cycle read transfer for channel 1.
+    mov dx, DMA_CLEAR_FF
+    xor al, al
+    out dx, al
+    mov dx, DMA_MODE
+    mov al, 0x49                 ; ch1, single-cycle, address increment, read (mem -> device)
+    out dx, al
+
+    mov dx, DMA_CH1_ADDR
+    mov eax, esi
+    out dx, al
+    mov al, ah
+    out dx, al
+
+    mov eax, esi
+    shr eax, 16
+    mov dx, DMA_CH1_PAGE
+    out dx, al
+
+    mov dx, DMA_CLEAR_FF
+    xor al, al
+    out dx, al
+    mov dx, DMA_CH1_COUNT
+    mov eax, ebx
+    out dx, al
+    mov al, ah
+    out dx, al
+
+    ; Unmask channel 1.
+    mov dx, DMA_MASK
+    mov al, 0x01
+    out dx, al
+    popa
+    ret
+
+sb16_set_output_rate:
+    ; IN: EAX = sample rate
+    push eax
+    mov al, 0x41
+    call sb16_dsp_write
+    pop eax
+    push eax
+    mov al, ah                  ; high byte
+    call sb16_dsp_write
+    pop eax
+    call sb16_dsp_write         ; low byte already in AL
+    ret
+
+sb16_start_pcm8:
+    ; IN: ESI = sample data, ECX = byte length, EAX = sample rate
+    cmp dword [sb16_present], 1
+    jne .fail
+    cmp ecx, 1
+    jb .fail
+    cmp ecx, 65536
+    jbe .len_ok
+    mov ecx, 65536
+.len_ok:
+    mov [sb16_last_len], ecx
+    push eax
+    push ecx
+    call sb16_program_dma8
+    pop ecx
+    pop eax
+    call sb16_set_output_rate
+    mov ebx, [sb16_last_len]
+    dec ebx
+    mov al, 0xC0                ; SB16 8-bit single-cycle output
+    call sb16_dsp_write
+    mov al, 0x00                ; unsigned mono PCM
+    call sb16_dsp_write
+    mov al, bl
+    call sb16_dsp_write         ; low count
+    mov al, bh
+    call sb16_dsp_write         ; high count
+    mov dword [sb16_last_status], 1
+    mov eax, 1
+    ret
+.fail:
+    mov dword [sb16_last_status], 0
+    xor eax, eax
+    ret
+
+sb16_play_wav:
+    ; IN: ESI = WAV buffer, ECX = file length. Supports canonical 8-bit PCM WAV.
+    cmp dword [sb16_present], 1
+    jne .fail
+    cmp ecx, 44
+    jb .fail
+    cmp dword [esi], 0x46464952     ; "RIFF"
+    jne .fail
+    cmp dword [esi+8], 0x45564157   ; "WAVE"
+    jne .fail
+    cmp word [esi+20], 1            ; PCM
+    jne .fail
+    mov ax, [esi+22]
+    mov [sb16_last_channels], al
+    cmp ax, 1
+    jne .fail                       ; first safe step: mono only
+    mov ax, [esi+34]
+    mov [sb16_last_bits], al
+    cmp ax, 8
+    jne .fail                       ; DMA8 path; 16-bit path can build on this
+    mov eax, [esi+24]
+    mov [sb16_last_rate], eax
+    mov edx, [esi+40]
+    mov [sb16_last_len], edx
+    cmp edx, 0
+    je .fail
+    cmp edx, ecx
+    ja .trim
+.play:
+    add esi, 44
+    mov ecx, edx
+    call sb16_start_pcm8
+    ret
+.trim:
+    mov edx, ecx
+    sub edx, 44
+    jmp .play
+.fail:
+    mov dword [sb16_last_status], 0
+    xor eax, eax
+    ret
+
+%endif
