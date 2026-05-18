@@ -206,12 +206,19 @@ msg_vmmap_ok      db 0x0A,"vm map ok",0
 msg_vmmap_fail    db 0x0A,"vm map fail",0
 msg_vmunmap_ok    db 0x0A,"vm unmap ok",0
 msg_vmunmap_fail  db 0x0A,"vm unmap fail",0
-msg_change_usage  db 0x0A,"Uso: change <ram|ata>",0
+msg_change_usage  db 0x0A,"Uso: change <ram|ata|a:|c:|d:>",0
 msg_change_ram_ok db 0x0A,"Cambiado a Ram Correctamente.",0
 msg_change_ata_ok db 0x0A,"Cambiado a ata Correctamente.",0
 msg_change_ata_no db 0x0A,"No se encontro disco.",0
+msg_change_fdd_ok db 0x0A,"Dispositivo activo: Floppy A:.",0
+msg_change_hdd_ok db 0x0A,"Dispositivo activo: Disco duro C:.",0
+msg_change_cd_ok  db 0x0A,"Dispositivo activo: CDROM D:.",0
+msg_change_dev_no db 0x0A,"Dispositivo no disponible.",0
 arg_ram           db "ram",0
 arg_ata           db "ata",0
+arg_a             db "a:",0
+arg_c             db "c:",0
+arg_d             db "d:",0
 dot_char          db ".",0
 msg_sw_from       db 0x0A,"Last from: ",0
 msg_sw_to         db 0x0A,"Last to: ",0
@@ -508,7 +515,7 @@ do_dir:
     pop ecx
     pop esi
 .next_entry:
-    add esi, 24          
+    add esi, 26
     dec ecx
     jnz .dir_loop
     jmp shell_loop
@@ -730,6 +737,21 @@ do_change:
     call strcmp
     cmp eax, 0
     je .to_ata
+    mov esi, [arg_ptr]
+    mov edi, arg_a
+    call strcmp
+    cmp eax, 0
+    je .to_fdd
+    mov esi, [arg_ptr]
+    mov edi, arg_c
+    call strcmp
+    cmp eax, 0
+    je .to_hdd
+    mov esi, [arg_ptr]
+    mov edi, arg_d
+    call strcmp
+    cmp eax, 0
+    je .to_cd
 .usage:
     mov esi, msg_change_usage
     call api_print_string
@@ -750,6 +772,41 @@ do_change:
     jmp shell_loop
 .ata_missing:
     mov esi, msg_change_ata_no
+    call api_print_string
+    jmp shell_loop
+.to_fdd:
+    mov al, 'A'
+    call storage_select_by_letter
+    cmp eax, 0
+    je .dev_missing
+    call fs_init_ram
+    mov dword [fs_driver_available], 1
+    mov esi, msg_change_fdd_ok
+    call api_print_string
+    jmp shell_loop
+.to_hdd:
+    mov al, 'C'
+    call storage_select_by_letter
+    cmp eax, 0
+    je .dev_missing
+    call fs_init_ata
+    mov dword [fs_driver_available], 1
+    mov esi, msg_change_hdd_ok
+    call api_print_string
+    jmp shell_loop
+.to_cd:
+    mov al, 'D'
+    call storage_select_by_letter
+    cmp eax, 0
+    je .dev_missing
+    ; CDROM read-only backend pending, keep RAM backend to avoid writes failing.
+    call fs_init_ram
+    mov dword [fs_driver_available], 1
+    mov esi, msg_change_cd_ok
+    call api_print_string
+    jmp shell_loop
+.dev_missing:
+    mov esi, msg_change_dev_no
     call api_print_string
     jmp shell_loop
 
