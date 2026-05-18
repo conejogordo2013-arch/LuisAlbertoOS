@@ -23,6 +23,18 @@ heap_end             dd KHEAP_START + KHEAP_SIZE
 paging_enabled       dd 0
 page_directory_phys  dd PAGE_DIR_BASE
 last_frame_alloc    dd 0
+last_frame_free     dd 0
+frame_alloc_count   dd 0
+frame_free_count    dd 0
+frame_alloc_fail_count dd 0
+kmalloc_last_addr   dd 0
+kmalloc_last_size   dd 0
+kmalloc_count       dd 0
+kmalloc_fail_count  dd 0
+kfree_last_addr     dd 0
+kfree_count         dd 0
+memory_error_addr   dd 0
+memory_error_count  dd 0
 
 mem_init:
     pusha
@@ -39,6 +51,18 @@ mem_init:
     mov dword [mem_used_bytes], RESERVED_FRAMES * PAGE_SIZE
     mov dword [heap_ptr], KHEAP_START
     mov dword [last_frame_alloc], 0
+    mov dword [last_frame_free], 0
+    mov dword [frame_alloc_count], 0
+    mov dword [frame_free_count], 0
+    mov dword [frame_alloc_fail_count], 0
+    mov dword [kmalloc_last_addr], 0
+    mov dword [kmalloc_last_size], 0
+    mov dword [kmalloc_count], 0
+    mov dword [kmalloc_fail_count], 0
+    mov dword [kfree_last_addr], 0
+    mov dword [kfree_count], 0
+    mov dword [memory_error_addr], 0
+    mov dword [memory_error_count], 0
     popa
     ret
 
@@ -68,6 +92,7 @@ frame_alloc:
     imul eax, PAGE_SIZE
     add dword [mem_used_bytes], PAGE_SIZE
     mov [last_frame_alloc], eax
+    inc dword [frame_alloc_count]
     mov [esp+28], eax
     popa
     ret
@@ -78,6 +103,9 @@ frame_alloc:
     inc ebx
     jmp .find_byte
 .no_frame:
+    inc dword [frame_alloc_fail_count]
+    mov dword [memory_error_addr], FRAME_BITMAP
+    inc dword [memory_error_count]
     mov dword [esp+28], 0
     popa
     ret
@@ -88,16 +116,24 @@ frame_free:
     mov ebx, eax
     shr ebx, 12
     cmp ebx, TOTAL_FRAMES
-    jae .done
+    jae .bad_addr
     mov edx, ebx
     shr edx, 3
     and ebx, 7
     mov al, [FRAME_BITMAP+edx]
     bt eax, ebx
-    jnc .done
+    jnc .bad_addr
     btc eax, ebx
     mov [FRAME_BITMAP+edx], al
     sub dword [mem_used_bytes], PAGE_SIZE
+    mov eax, [esp+28]
+    mov [last_frame_free], eax
+    inc dword [frame_free_count]
+    jmp .done
+.bad_addr:
+    mov eax, [esp+28]
+    mov [memory_error_addr], eax
+    inc dword [memory_error_count]
 .done:
     popa
     ret
@@ -146,13 +182,21 @@ kmalloc:
     cmp edx, [heap_end]
     ja .fail
     mov [heap_ptr], edx
+    mov [kmalloc_last_addr], eax
+    mov [kmalloc_last_size], ecx
+    inc dword [kmalloc_count]
     ret
 .fail:
+    mov [memory_error_addr], edx
+    inc dword [memory_error_count]
+    inc dword [kmalloc_fail_count]
     xor eax, eax
     ret
 
 kfree:
-    ; bump allocator: free no-op intencional
+    ; bump allocator: free no-op intencional, but keep diagnostics.
+    mov [kfree_last_addr], eax
+    inc dword [kfree_count]
     ret
 
 
