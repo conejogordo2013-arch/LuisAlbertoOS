@@ -12,8 +12,9 @@ kernel_entry:
     or eax, 0x1
     mov cr0, eax
     
-    ; Far jump to flush instruction pipeline and set CS
-    jmp 0x08:kernel_32
+    ; Far jump to flush instruction pipeline and set CS.
+    ; Use 32-bit far jump encoding explicitly for protected-mode entry.
+    jmp dword 0x08:kernel_32
 
 [BITS 32]
 kernel_32:
