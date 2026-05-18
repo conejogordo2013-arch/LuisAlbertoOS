@@ -8,9 +8,19 @@
 global floppy_read_sector
 global floppy_write_sector
 global floppy_probe
+global storage_select_by_letter
+global storage_detect_all
 
 msg_floppy_err db "ATA read/write error", 0x0A, 0
 ata_present dd 0
+storage_current_device db 'C'
+storage_floppy_present dd 1
+storage_cdrom_present  dd 0
+storage_hdd_present    dd 0
+storage_device_name_ram db "RAM",0
+storage_device_name_hdd db "HDD (C:)",0
+storage_device_name_cd  db "CDROM (D:)",0
+storage_device_name_fdd db "FLOPPY (A:)",0
 
 floppy_probe:
     push edx
@@ -24,8 +34,52 @@ floppy_probe:
     ret
 .present:
     mov dword [ata_present], 1
+    mov dword [storage_hdd_present], 1
+    mov byte [storage_current_device], 'C'
     mov eax, 1
     pop edx
+    ret
+
+storage_detect_all:
+    ; HDD via ATA I/O probe
+    call floppy_probe
+    ; Floppy is boot media in this project, keep enabled
+    mov dword [storage_floppy_present], 1
+    ; CDROM ATAPI detection is not implemented yet, keep accurate status (off)
+    mov dword [storage_cdrom_present], 0
+    ret
+
+; Input AL = drive letter: 'A', 'C' or 'D'
+; Output EAX = 1 on success, 0 on unsupported/missing device
+storage_select_by_letter:
+    cmp al, 'A'
+    je .to_floppy
+    cmp al, 'C'
+    je .to_hdd
+    cmp al, 'D'
+    je .to_cdrom
+    xor eax, eax
+    ret
+.to_floppy:
+    cmp dword [storage_floppy_present], 1
+    jne .fail
+    mov byte [storage_current_device], 'A'
+    mov eax, 1
+    ret
+.to_hdd:
+    cmp dword [storage_hdd_present], 1
+    jne .fail
+    mov byte [storage_current_device], 'C'
+    mov eax, 1
+    ret
+.to_cdrom:
+    cmp dword [storage_cdrom_present], 1
+    jne .fail
+    mov byte [storage_current_device], 'D'
+    mov eax, 1
+    ret
+.fail:
+    xor eax, eax
     ret
 
 

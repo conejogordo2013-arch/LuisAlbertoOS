@@ -22,7 +22,7 @@ oskrnl_main:
     ; Inicializar almacenamiento. La terminal usa RAM FS por defecto para
     ; arrancar igual aunque no exista ATA/IDE. El driver ATA se sondea solo
     ; como dispositivo opcional y nunca bloquea comandos de archivos.
-    call floppy_probe
+    call storage_detect_all
     mov dword [fs_driver_available], 1
     mov esi, msg_fs_ram
     call api_print_string
