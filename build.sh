@@ -12,6 +12,8 @@ mkdir -p boot kernel apps drivers libs bin
 #   0       boot sector
 #   1..80   kernel load window read by boot/LABootL.asm (80 sectors)
 #   104..   apps and optional demo data, safely outside the kernel window
+SECTOR_SIZE=512
+DISK_SECTORS=2880
 KERNEL_LOAD_SECTORS=80
 KERNEL_START_LBA=1
 APP_SAMPLE_LBA=104
@@ -21,12 +23,23 @@ APP_LATEXTEDIT_LBA=110
 FS_DIR_LBA=144
 FS_DATA_LBA=145
 
+sectors_for_file() {
+    local bytes=$1
+    echo $(((bytes + SECTOR_SIZE - 1) / SECTOR_SIZE))
+}
+
 # 1. Bootloader and kernel
 nasm -f bin boot/LABootL.asm -o bin/boot.bin
 nasm -f bin kernel/LAKernel.asm -o bin/kernel.bin
 
+boot_size=$(wc -c < bin/boot.bin)
+if (( boot_size != SECTOR_SIZE )); then
+    echo "Error: boot.bin must be exactly ${SECTOR_SIZE} bytes; got ${boot_size}." >&2
+    exit 1
+fi
+
 kernel_size=$(wc -c < bin/kernel.bin)
-max_kernel_size=$((KERNEL_LOAD_SECTORS * 512))
+max_kernel_size=$((KERNEL_LOAD_SECTORS * SECTOR_SIZE))
 kernel_end_lba=$((KERNEL_START_LBA + KERNEL_LOAD_SECTORS))
 first_payload_lba=$APP_SAMPLE_LBA
 if (( kernel_size > max_kernel_size )); then
@@ -44,8 +57,28 @@ nasm -f bin apps/textedit.laa.asm -o bin/textedit.laa
 nasm -f bin apps/taskmgr.laa.asm -o bin/taskmgr.laa
 nasm -f bin apps/LATextedit.asm -o bin/LATextedit.laa
 
+declare -a APP_FILES=(
+    "bin/sample1.laa:${APP_SAMPLE_LBA}:sample1"
+    "bin/textedit.laa:${APP_TEXTEDIT_LBA}:textedit"
+    "bin/taskmgr.laa:${APP_TASKMGR_LBA}:taskmgr"
+    "bin/LATextedit.laa:${APP_LATEXTEDIT_LBA}:LATextedit"
+)
+
+next_reserved_lba=${FS_DIR_LBA}
+for app in "${APP_FILES[@]}"; do
+    IFS=':' read -r app_file app_lba app_name <<< "${app}"
+    app_size=$(wc -c < "${app_file}")
+    app_sectors=$(sectors_for_file "${app_size}")
+    app_end_lba=$((app_lba + app_sectors))
+
+    if (( app_end_lba > next_reserved_lba )); then
+        echo "Error: ${app_name} (${app_size} bytes) occupies LBAs ${app_lba}..$((app_end_lba - 1)), overlapping reserved LBA ${next_reserved_lba}." >&2
+        exit 1
+    fi
+done
+
 # 3. Create image once
-dd if=/dev/zero of=LuisAlbertoOS.img bs=512 count=2880 status=none
+dd if=/dev/zero of=LuisAlbertoOS.img bs=${SECTOR_SIZE} count=${DISK_SECTORS} status=none
 
 # 4. Bootloader and kernel
 dd if=bin/boot.bin of=LuisAlbertoOS.img conv=notrunc status=none
@@ -70,6 +103,7 @@ entry[24] = 1  # FLAG_FILE
 entry[25] = 0  # root parent
 Path("bin/mock_dir.bin").write_bytes(entry)
 PY
+
 dd if=bin/mock_dir.bin of=LuisAlbertoOS.img seek=${FS_DIR_LBA} conv=notrunc status=none
 printf 'Hello from FS!\n\0' > bin/mock_test.txt
 dd if=bin/mock_test.txt of=LuisAlbertoOS.img seek=${FS_DATA_LBA} conv=notrunc status=none
