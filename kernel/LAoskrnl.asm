@@ -27,47 +27,15 @@ oskrnl_main:
     mov esi, msg_fs_ram
     call api_print_string
 
-    call rtl8139_init
-    mov [net_driver_available], eax
+    ; Nota de estabilidad: algunos equipos/emuladores reinician si se sondean
+    ; dispositivos opcionales demasiado pronto durante el arranque.
+    ; Dejamos los drivers opcionales en modo bajo demanda (comandos shell).
+    mov dword [net_driver_available], 0
     mov dword [active_net_driver], 0
-    cmp eax, 0
-    jne .net_ok
-    mov esi, msg_net_missing
-    call api_print_string
-.net_ok:
-    mov dword [active_net_driver], 1
-
-    call ac97_init
-    mov [audio_driver_available], eax
+    mov dword [audio_driver_available], 0
     mov dword [active_audio_driver], 0
-    cmp eax, 0
-    jne .audio_ok
-    mov esi, msg_audio_missing
+    mov esi, msg_optional_deferred
     call api_print_string
-    jmp .audio_done
-.audio_ok:
-    mov dword [active_audio_driver], 1
-    call ac97_beep
-.audio_done:
-    call sb16_probe
-    cmp dword [active_audio_driver], 0
-    jne .after_sb16_default
-    cmp dword [sb16_present], 1
-    jne .after_sb16_default
-    mov dword [active_audio_driver], 2
-.after_sb16_default:
-    call e1000_probe
-    cmp dword [net_driver_available], 0
-    jne .after_e1000_default
-    cmp dword [e1000_present], 1
-    jne .after_e1000_default
-    mov dword [active_net_driver], 2
-    call e1000_init
-    mov dword [net_driver_available], eax
-.after_e1000_default:
-    call cdrom_probe
-    call sata_probe
-    call floppy_probe_legacy
 
     call scheduler_register_kernel_main
     call shell_start
@@ -79,3 +47,4 @@ msg_net_missing db 0x0A,"[WARN] RTL8139 no detectado. Comandos de red no disponi
 msg_audio_missing db 0x0A,"[WARN] AC97 no detectado. Comandos de audio no disponibles.",0
 msg_mem_ready db 0x0A,"[OK] Memoria/Interrupciones inicializadas.",0
 msg_sched_ready db 0x0A,"[OK] Scheduler round-robin inicializado.",0
+msg_optional_deferred db 0x0A,"[INFO] Drivers opcionales (red/audio/discos extra) diferidos para estabilidad de arranque.",0

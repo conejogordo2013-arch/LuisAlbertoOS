@@ -84,15 +84,15 @@ interrupts_init:
     out 0x21,al
     out 0xA1,al
 
-    ; Unmask IRQ0 only. IRQ1 stays masked because the current shell
-    ; reads the keyboard by polling port 0x60; draining it in the IRQ
-    ; handler would make interactive input unreliable.
-    mov al,0xFE
-    out 0x21,al
+    ; Keep all hardware IRQ lines masked during early boot.
+    ; The shell currently polls keyboard input and the scheduler runs
+    ; cooperatively, so IRQ delivery is optional and can destabilize
+    ; systems where PIC/PIT handling is incomplete.
     mov al,0xFF
+    out 0x21,al
     out 0xA1,al
 
-    ; PIT @100Hz
+    ; PIT @100Hz (configured for future use, IRQ still masked)
     mov al,0x36
     out 0x43,al
     mov ax,11931
@@ -101,7 +101,7 @@ interrupts_init:
     out 0x40,al
 
     lidt [idt_ptr]
-    sti
+    cli
     mov dword [interrupts_ready],1
     popa
     ret
