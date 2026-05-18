@@ -63,6 +63,9 @@ gdt_descriptor:
 %include "drivers/rtl8139.lasys"   ; <--- Añadir Driver de Red
 %include "kernel/net.lasys"        ; <--- Añadir Pila de Red
 %include "drivers/ac97.lasys"
+%include "drivers/sb16.lasys"
+%include "drivers/e1000.lasys"
+%include "drivers/storage_extra.lasys"
 
 %include "kernel/interrupts.lasys"
 

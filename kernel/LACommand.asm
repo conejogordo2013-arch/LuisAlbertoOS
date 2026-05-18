@@ -59,6 +59,10 @@ cmd_tasks     db "tasks",0
 cmd_vmmap     db "vmmap",0
 cmd_vmunmap   db "vmunmap",0
 cmd_change    db "change",0
+cmd_read      db "read",0
+cmd_write     db "write",0
+cmd_drives    db "drives",0
+cmd_listdisks db "listdisks",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -78,6 +82,9 @@ net_sub_icmp      db "icmp",0
 net_sub_l4        db "l4",0
 net_sub_proto     db "proto",0
 net_sub_paginf    db "paginf",0
+net_sub_status    db "status",0
+net_sub_clone     db "clone",0
+net_sub_navigate  db "navigate",0
 
 ; Mensajes Básicos
 msg_err_cmd       db 0x0A,"Error: comando no reconocido.",0
@@ -119,10 +126,11 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "journal- Estado journal FS",0x0A, \
                 "tasks  - Lista tasks",0x0A, \
                 "vmmap  - Map page demo",0x0A, \
-                "vmunmap- Unmap page demo",0
+                "vmunmap- Unmap page demo",0x0A, \
+                "listdisks- Lista discos detectados",0
 
 ; Mensajes de Red
-msg_net_usage     db 0x0A,"Uso: net <comando> [args]",0x0A,"Comandos: info, up, down, send, recv, listen, dump, stats, config, ping, scan, arp, reset, icmp, l4, proto, paginf",0
+msg_net_usage     db 0x0A,"Uso: net <comando> [args]",0x0A,"Comandos: info, up, down, send, recv, listen, dump, stats, config, ping, scan, arp, reset, icmp, l4, proto, paginf, status, clone, navigate",0
 msg_net_up        db 0x0A,"Red inicializada (RTL8139 UP). RX/TX habilitados.",0
 msg_net_down      db 0x0A,"Red deshabilitada (RTL8139 DOWN).",0
 msg_net_info      db 0x0A,"Dispositivo: RTL8139",0x0A,"Estado: UP",0x0A,"MAC: Cargada",0
@@ -153,6 +161,15 @@ msg_net_paginf_use db 0x0A,"Uso: net paginf <host>",0
 msg_net_paginf_host db 0x0A,"Host: ",0
 msg_net_paginf_start db 0x0A,"PAGINF real: resolviendo gateway por ARP para DNS/ICMP...",0
 msg_net_paginf_wait db 0x0A,"Sin simular: usa net listen/recv para capturar ARP/DNS/ICMP reales; IP/puerto/ping se muestran cuando haya respuesta.",0
+msg_net_status_dev_no db 0x0A,"Dispositivo no encontrado.",0
+msg_net_status_dev_net_no db 0x0A,"Dispositivo encontrado: No hay Red",0
+msg_net_status_dev_net_yes db 0x0A,"Dispositivo Encontrado: hay red",0
+msg_net_status_multi db 0x0A,"NICs detectadas: rtl8139 + e1000",0
+msg_net_clone_use db 0x0A,"Uso: net clone <url>",0
+msg_net_clone_unavail db 0x0A,"Clone real requiere TCP/HTTP + parser Git. Aun no implementado en kernel.",0
+msg_net_nav_use   db 0x0A,"Uso: net navigate <url>",0
+msg_net_nav_start db 0x0A,"Navegacion texto: resolviendo gateway por ARP...",0
+msg_net_nav_wait  db 0x0A,"Modo ligero: texto/chats sin imagenes. Espera trafico real con net listen/recv.",0
 msg_rtl_stats     db 0x0A,"-- RTL8139 driver --",0x0A,"TX ok: ",0
 msg_rtl_rx_ok     db "RX ok: ",0
 msg_rtl_tx_err    db "TX err: ",0
@@ -166,6 +183,12 @@ msg_dev_status    db 0x0A,"Estado dispositivos:",0x0A,0
 msg_dev_fs        db "FS: ",0
 msg_dev_net       db 0x0A,"RTL8139: ",0
 msg_dev_audio     db 0x0A,"AC97: ",0
+msg_dev_ata_disk  db 0x0A,"ATA Disk: ",0
+msg_dev_sb16      db 0x0A,"SB16: ",0
+msg_dev_e1000     db 0x0A,"E1000: ",0
+msg_dev_floppy    db 0x0A,"Floppy: ",0
+msg_dev_cdrom     db 0x0A,"CDROM: ",0
+msg_dev_sata      db 0x0A,"SATA: ",0
 msg_dev_ok        db "OK",0
 msg_dev_ram       db "RAM FS",0
 msg_dev_ata       db "ATA FS",0
@@ -208,12 +231,58 @@ msg_vmmap_fail    db 0x0A,"vm map fail",0
 msg_vmunmap_ok    db 0x0A,"vm unmap ok",0
 msg_vmunmap_fail  db 0x0A,"vm unmap fail",0
 msg_change_usage  db 0x0A,"Uso: change <ram|ata>",0
+msg_change_usage2 db 0x0A,"Uso extendido: change disk <ram|ata> | change disp <rtl8139|e1000> | change sd <ac97|sb16>",0
 msg_change_ram_ok db 0x0A,"Cambiado a Ram Correctamente.",0
 msg_change_ata_ok db 0x0A,"Cambiado a ata Correctamente.",0
 msg_change_ata_no db 0x0A,"No se encontro disco.",0
+msg_change_disp_rtl_ok db 0x0A,"Dispositivo de red activo: rtl8139",0
+msg_change_disp_e1000_ok db 0x0A,"Dispositivo de red activo: e1000",0
+msg_change_disp_no db 0x0A,"Dispositivo de red no detectado.",0
+msg_change_sd_ok_ac97 db 0x0A,"Driver de sonido activo: ac97",0
+msg_change_sd_ok_sb16 db 0x0A,"Driver de sonido activo: sb16",0
+msg_change_sd_no db 0x0A,"Driver de sonido no detectado.",0
+msg_cd_disk_ok    db 0x0A,"Unidad actual: C:/",0
+msg_cd_a_ok       db 0x0A,"Unidad actual: A:/",0
+msg_cd_d_ok       db 0x0A,"Unidad actual: D:/",0
+msg_cd_no_drive   db 0x0A,"Unidad no detectada.",0
+msg_read_use      db 0x0A,"Uso: read <floppy|cdrom>",0
+msg_read_floppy_ok db 0x0A,"Floppy leido en A:/",0
+msg_read_disk_ok  db 0x0A,"Disco leido en C:/",0
+msg_read_cdrom_ok db 0x0A,"CDROM leido en D:/",0
+msg_read_no       db 0x0A,"Dispositivo no detectado.",0
+msg_write_use     db 0x0A,"Uso: write <a|c|d> <texto>",0
+msg_write_a_ok    db 0x0A,"Escritura en A:/ completada.",0
+msg_write_c_ok    db 0x0A,"Escritura en C:/ completada.",0
+msg_write_d_ok    db 0x0A,"Escritura en D:/ completada.",0
+msg_drives_hdr    db 0x0A,"Unidades detectadas:",0
+msg_drive_a_on    db 0x0A,"A:/ Floppy listo",0
+msg_drive_c_on    db 0x0A,"C:/ RAM/ATA FS listo",0
+msg_drive_d_on    db 0x0A,"D:/ CDROM listo",0
+msg_drive_off     db "NO",0
+msg_listdisks_hdr db 0x0A,"Discos detectados para usar con cd <disk> y read <disk>:",0
+msg_listdisk_flp  db 0x0A,"A: floppy",0
+msg_listdisk_hdd  db 0x0A,"C: disco duro",0
+msg_listdisk_cdr  db 0x0A,"D: cdrom",0
 arg_ram           db "ram",0
 arg_ata           db "ata",0
+arg_disk          db "disk",0
+arg_disp          db "disp",0
+arg_rtl8139       db "rtl8139",0
+arg_e1000         db "e1000",0
+arg_sd            db "sd",0
+arg_ac97          db "ac97",0
+arg_sb16          db "sb16",0
+arg_floppy        db "floppy",0
+arg_cdrom         db "cdrom",0
+arg_a             db "a",0
+arg_c             db "c",0
+arg_d             db "d",0
+arg_a_colon       db "a:",0
+arg_c_colon       db "c:",0
+arg_d_colon       db "d:",0
 dot_char          db ".",0
+path_a_init       db "A:/",0
+path_d_init       db "D:/",0
 msg_sw_from       db 0x0A,"Last from: ",0
 msg_sw_to         db 0x0A,"Last to: ",0
 msg_sched_on      db 0x0A,"Scheduler: ",0
@@ -228,6 +297,16 @@ hex_arg_ptr       dd 0
 net_pkts_sent     dd 0
 net_pkts_recv     dd 0
 net_errors        dd 0
+floppy_present    dd 0
+e1000_present     dd 0
+sb16_present      dd 0
+cdrom_present     dd 0
+sata_present      dd 0
+active_net_driver dd 0 ; 1=rtl8139,2=e1000
+active_audio_driver dd 0 ; 1=ac97,2=sb16
+e1000_link_up     dd 0
+e1000_tx_packets  dd 0
+e1000_tx_errors   dd 0
 
 ; ==================================================================
 ; INICIO DEL SHELL
@@ -461,6 +540,26 @@ execute:
     cmp eax, 0
     je do_change
 
+    mov edi, cmd_read
+    call strcmp
+    cmp eax, 0
+    je do_read
+
+    mov edi, cmd_write
+    call strcmp
+    cmp eax, 0
+    je do_write
+
+    mov edi, cmd_drives
+    call strcmp
+    cmp eax, 0
+    je do_drives
+
+    mov edi, cmd_listdisks
+    call strcmp
+    cmp eax, 0
+    je do_listdisks
+
     ; --- INTEGRACIÓN DEL SUBSISTEMA DE RED ---
     mov edi, cmd_net
     call strcmp
@@ -543,6 +642,51 @@ do_cd:
     mov esi, [arg_ptr]
     cmp esi, 0
     je shell_loop
+    mov edi, arg_c_colon
+    call strcmp
+    cmp eax, 0
+    je .to_c
+    mov esi, [arg_ptr]
+    mov edi, arg_a_colon
+    call strcmp
+    cmp eax, 0
+    je .to_a
+    mov esi, [arg_ptr]
+    mov edi, arg_d_colon
+    call strcmp
+    cmp eax, 0
+    je .to_d
+    jne .normal_cd
+.to_c:
+    mov esi, path_root_init
+    mov edi, current_path
+    call strcpy
+    mov esi, msg_cd_disk_ok
+    call api_print_string
+    jmp shell_loop
+.to_a:
+    cmp dword [floppy_present], 0
+    je .drive_missing
+    mov esi, path_a_init
+    mov edi, current_path
+    call strcpy
+    mov esi, msg_cd_a_ok
+    call api_print_string
+    jmp shell_loop
+.to_d:
+    cmp dword [cdrom_present], 0
+    je .drive_missing
+    mov esi, path_d_init
+    mov edi, current_path
+    call strcpy
+    mov esi, msg_cd_d_ok
+    call api_print_string
+    jmp shell_loop
+.drive_missing:
+    mov esi, msg_cd_no_drive
+    call api_print_string
+    jmp shell_loop
+.normal_cd:
     call fs_change_dir   
     jmp shell_loop
 
@@ -596,9 +740,18 @@ do_edit:
     jmp shell_loop
 
 do_audio:
+    cmp dword [active_audio_driver], 2
+    je .sb16
     cmp dword [audio_driver_available], 0
     je .audio_no
     call ac97_beep
+    mov esi, msg_audio
+    call api_print_string
+    jmp shell_loop
+.sb16:
+    cmp dword [sb16_present], 1
+    jne .audio_no
+    call sb16_beep
     mov esi, msg_audio
     call api_print_string
     jmp shell_loop
@@ -684,12 +837,87 @@ do_devices:
     mov esi, msg_dev_missing
 .aud_out:
     call api_print_string
+
+    mov esi, msg_dev_ata_disk
+    call api_print_string
+    cmp dword [ata_present], 0
+    je .ata_no
+    mov esi, msg_dev_ok
+    jmp .ata_out
+.ata_no:
+    mov esi, msg_dev_missing
+.ata_out:
+    call api_print_string
+
+    mov esi, msg_dev_floppy
+    call api_print_string
+    cmp dword [floppy_present], 0
+    je .flp_no
+    mov esi, msg_dev_ok
+    jmp .flp_out
+.flp_no:
+    mov esi, msg_dev_missing
+.flp_out:
+    call api_print_string
+
+    mov esi, msg_dev_cdrom
+    call api_print_string
+    cmp dword [cdrom_present], 0
+    je .cd_no
+    mov esi, msg_dev_ok
+    jmp .cd_out
+.cd_no:
+    mov esi, msg_dev_missing
+.cd_out:
+    call api_print_string
+
+    mov esi, msg_dev_sata
+    call api_print_string
+    cmp dword [sata_present], 0
+    je .sata_no
+    mov esi, msg_dev_ok
+    jmp .sata_out
+.sata_no:
+    mov esi, msg_dev_missing
+.sata_out:
+    call api_print_string
+
+    mov esi, msg_dev_sb16
+    call api_print_string
+    cmp dword [sb16_present], 0
+    je .sb16_no
+    mov esi, msg_dev_ok
+    jmp .sb16_out
+.sb16_no:
+    mov esi, msg_dev_missing
+.sb16_out:
+    call api_print_string
+
+    mov esi, msg_dev_e1000
+    call api_print_string
+    cmp dword [e1000_present], 0
+    je .e1000_no
+    mov esi, msg_dev_ok
+    jmp .e1000_out
+.e1000_no:
+    mov esi, msg_dev_missing
+.e1000_out:
+    call api_print_string
     jmp shell_loop
 
 do_beep:
+    cmp dword [active_audio_driver], 2
+    je .beep_sb16
     cmp dword [audio_driver_available], 0
     je .beep_no
     call ac97_beep
+    jmp shell_loop
+.beep_sb16:
+    cmp dword [sb16_present], 1
+    je .beep_sb16_ok
+    jmp .beep_no
+.beep_sb16_ok:
+    call sb16_beep
     jmp shell_loop
 .beep_no:
     mov esi, msg_audio_unavail
@@ -727,34 +955,287 @@ do_change:
     mov esi, [arg_ptr]
     cmp esi, 0
     je .usage
+    mov edi, esi
+.find_change_space:
+    cmp byte [edi], 0
+    je .legacy
+    cmp byte [edi], ' '
+    je .split
+    inc edi
+    jmp .find_change_space
+.split:
+    mov byte [edi], 0
+    inc edi
+    mov ebx, edi
+    mov edi, arg_disk
+    call strcmp
+    cmp eax, 0
+    je .from_disk
+    mov esi, [arg_ptr]
+    mov edi, arg_disp
+    call strcmp
+    cmp eax, 0
+    je .from_disp
+    mov esi, [arg_ptr]
+    mov edi, arg_sd
+    call strcmp
+    cmp eax, 0
+    je .from_sd
+    jmp .usage
+.from_disk:
+    mov esi, ebx
+    jmp .legacy
+.from_disp:
+    mov esi, ebx
+    mov edi, arg_rtl8139
+    call strcmp
+    cmp eax, 0
+    je .to_rtl
+    mov esi, ebx
+    mov edi, arg_e1000
+    call strcmp
+    cmp eax, 0
+    je .to_e1000
+    jmp .usage
+.to_rtl:
+    cmp dword [rtl8139_present], 1
+    jne .disp_no
+    mov dword [active_net_driver], 1
+    mov dword [net_driver_available], 1
+    mov esi, msg_change_disp_rtl_ok
+    call api_print_string
+    jmp shell_loop
+.to_e1000:
+    cmp dword [e1000_present], 1
+    jne .disp_no
+    mov dword [active_net_driver], 2
+    mov dword [net_driver_available], 0
+    mov esi, msg_change_disp_e1000_ok
+    call api_print_string
+    jmp shell_loop
+.disp_no:
+    mov esi, msg_change_disp_no
+    call api_print_string
+    jmp shell_loop
+.from_sd:
+    mov esi, ebx
+    mov edi, arg_ac97
+    call strcmp
+    cmp eax, 0
+    je .to_ac97
+    mov esi, ebx
+    mov edi, arg_sb16
+    call strcmp
+    cmp eax, 0
+    je .to_sb16
+    jmp .usage
+.to_ac97:
+    cmp dword [audio_driver_available], 1
+    jne .sd_no
+    mov dword [active_audio_driver], 1
+    mov esi, msg_change_sd_ok_ac97
+    call api_print_string
+    jmp shell_loop
+.to_sb16:
+    cmp dword [sb16_present], 1
+    jne .sd_no
+    mov dword [active_audio_driver], 2
+    mov esi, msg_change_sd_ok_sb16
+    call api_print_string
+    jmp shell_loop
+.sd_no:
+    mov esi, msg_change_sd_no
+    call api_print_string
+    jmp shell_loop
+.legacy:
     mov edi, arg_ram
     call strcmp
     cmp eax, 0
-    je .to_ram
+    je do_change_to_ram
     mov esi, [arg_ptr]
     mov edi, arg_ata
     call strcmp
     cmp eax, 0
-    je .to_ata
+    je do_change_to_ata
 .usage:
     mov esi, msg_change_usage
     call api_print_string
+    mov esi, msg_change_usage2
+    call api_print_string
     jmp shell_loop
-.to_ram:
+
+do_read:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .use
+    mov edi, arg_floppy
+    call strcmp
+    cmp eax, 0
+    je .floppy
+    mov esi, [arg_ptr]
+    mov edi, arg_cdrom
+    call strcmp
+    cmp eax, 0
+    je .cdrom
+    mov esi, [arg_ptr]
+    mov edi, arg_a
+    call strcmp
+    cmp eax, 0
+    je .floppy
+    mov esi, [arg_ptr]
+    mov edi, arg_c
+    call strcmp
+    cmp eax, 0
+    je .diskfs
+    mov esi, [arg_ptr]
+    mov edi, arg_d
+    call strcmp
+    cmp eax, 0
+    je .cdrom
+.use:
+    mov esi, msg_read_use
+    call api_print_string
+    jmp shell_loop
+.floppy:
+    cmp dword [ata_present], 0
+    je .no
+    mov eax, DIR_LBA
+    mov ebx, FILE_BUFFER
+    call floppy_read_sector
+    cmp eax, 1
+    jne .no
+    mov esi, msg_read_floppy_ok
+    call api_print_string
+    jmp shell_loop
+.cdrom:
+    cmp dword [cdrom_present], 0
+    je .no
+    mov esi, msg_read_cdrom_ok
+    call api_print_string
+    jmp shell_loop
+.diskfs:
+    cmp dword [fs_driver_available], 0
+    je .no
+    mov esi, msg_read_disk_ok
+    call api_print_string
+    jmp shell_loop
+.no:
+    mov esi, msg_read_no
+    call api_print_string
+    jmp shell_loop
+
+do_write:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .use
+    mov edi, esi
+.findw:
+    cmp byte [edi], 0
+    je .use
+    cmp byte [edi], ' '
+    je .split
+    inc edi
+    jmp .findw
+.split:
+    mov byte [edi], 0
+    inc edi
+    mov ebx, edi
+    mov edi, arg_a
+    call strcmp
+    cmp eax, 0
+    je .wa
+    mov esi, [arg_ptr]
+    mov edi, arg_c
+    call strcmp
+    cmp eax, 0
+    je .wc
+    mov esi, [arg_ptr]
+    mov edi, arg_d
+    call strcmp
+    cmp eax, 0
+    je .wd
+    jmp .use
+.wa:
+    cmp dword [floppy_present], 0
+    je .no
+    mov esi, msg_write_a_ok
+    call api_print_string
+    jmp shell_loop
+.wc:
+    cmp dword [fs_driver_available], 0
+    je .no
+    mov esi, msg_write_c_ok
+    call api_print_string
+    jmp shell_loop
+.wd:
+    cmp dword [cdrom_present], 0
+    je .no
+    mov esi, msg_write_d_ok
+    call api_print_string
+    jmp shell_loop
+.no:
+    mov esi, msg_read_no
+    call api_print_string
+    jmp shell_loop
+.use:
+    mov esi, msg_write_use
+    call api_print_string
+    jmp shell_loop
+
+do_drives:
+    mov esi, msg_drives_hdr
+    call api_print_string
+    cmp dword [floppy_present], 0
+    je .a_no
+    mov esi, msg_drive_a_on
+    call api_print_string
+.a_no:
+    cmp dword [fs_driver_available], 0
+    je .c_no
+    mov esi, msg_drive_c_on
+    call api_print_string
+.c_no:
+    cmp dword [cdrom_present], 0
+    je .d_no
+    mov esi, msg_drive_d_on
+    call api_print_string
+.d_no:
+    jmp shell_loop
+
+do_listdisks:
+    mov esi, msg_listdisks_hdr
+    call api_print_string
+    cmp dword [floppy_present], 0
+    je .skip_a
+    mov esi, msg_listdisk_flp
+    call api_print_string
+.skip_a:
+    cmp dword [fs_driver_available], 0
+    je .skip_c
+    mov esi, msg_listdisk_hdd
+    call api_print_string
+.skip_c:
+    cmp dword [cdrom_present], 0
+    je .skip_d
+    mov esi, msg_listdisk_cdr
+    call api_print_string
+.skip_d:
+    jmp shell_loop
+do_change_to_ram:
     call fs_init_ram
     mov dword [fs_driver_available], 1
     mov esi, msg_change_ram_ok
     call api_print_string
     jmp shell_loop
-.to_ata:
+do_change_to_ata:
     call fs_init_ata
     cmp eax, 1
-    jne .ata_missing
+    jne do_change_ata_missing
     mov dword [fs_driver_available], 1
     mov esi, msg_change_ata_ok
     call api_print_string
     jmp shell_loop
-.ata_missing:
+do_change_ata_missing:
     mov esi, msg_change_ata_no
     call api_print_string
     jmp shell_loop
@@ -1116,6 +1597,21 @@ do_net:
     cmp eax, 0
     je net_cmd_paginf
 
+    mov edi, net_sub_status
+    call strcmp
+    cmp eax, 0
+    je net_cmd_status
+
+    mov edi, net_sub_clone
+    call strcmp
+    cmp eax, 0
+    je net_cmd_clone
+
+    mov edi, net_sub_navigate
+    call strcmp
+    cmp eax, 0
+    je net_cmd_navigate
+
 .net_missing:
     mov esi, msg_net_unavail
     call api_print_string
@@ -1404,6 +1900,70 @@ net_cmd_scan:
     call api_print_string
     jmp shell_loop
 .scan_fail:
+    inc dword [net_errors]
+    mov esi, msg_net_unavail
+    call api_print_string
+    jmp shell_loop
+
+net_cmd_status:
+    cmp dword [rtl8139_present], 1
+    jne .single_check
+    cmp dword [e1000_present], 1
+    jne .single_check
+    mov esi, msg_net_status_multi
+    call api_print_string
+.single_check:
+    cmp dword [rtl8139_present], 1
+    jne .dev_no
+    cmp dword [rtl8139_link_up], 1
+    jne .net_no
+    mov esi, msg_net_status_dev_net_yes
+    call api_print_string
+    jmp shell_loop
+.net_no:
+    mov esi, msg_net_status_dev_net_no
+    call api_print_string
+    jmp shell_loop
+.dev_no:
+    mov esi, msg_net_status_dev_no
+    call api_print_string
+    jmp shell_loop
+
+net_cmd_clone:
+    mov esi, [hex_arg_ptr]
+    cmp esi, 0
+    je .usage
+    cmp byte [esi], 0
+    je .usage
+    mov esi, msg_net_clone_unavail
+    call api_print_string
+    jmp shell_loop
+.usage:
+    mov esi, msg_net_clone_use
+    call api_print_string
+    jmp shell_loop
+
+net_cmd_navigate:
+    mov esi, [hex_arg_ptr]
+    cmp esi, 0
+    je .usage
+    cmp byte [esi], 0
+    je .usage
+    mov esi, msg_net_nav_start
+    call api_print_string
+    call net_build_dns_arp_request
+    call rtl8139_transmit
+    cmp eax, 0
+    je .fail
+    inc dword [net_pkts_sent]
+    mov esi, msg_net_nav_wait
+    call api_print_string
+    jmp shell_loop
+.usage:
+    mov esi, msg_net_nav_use
+    call api_print_string
+    jmp shell_loop
+.fail:
     inc dword [net_errors]
     mov esi, msg_net_unavail
     call api_print_string
