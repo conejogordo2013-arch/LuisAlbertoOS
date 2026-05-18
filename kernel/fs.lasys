@@ -7,13 +7,15 @@
 %ifndef FS_LASYS
 %define FS_LASYS
 
-DIR_LBA     equ 96
-DATA_LBA    equ 97
+DIR_LBA     equ 144
+DATA_LBA    equ 145
 DIR_BUFFER  equ 0x5000  ; Directorio en memoria
 FILE_BUFFER equ 0x6000  ; Buffer I/O
 APP_POINTER equ 0x7000  ; Puntero a app cargada
-RAMFS_DATA  equ 0xD000  ; 16 sectores RAM para fallback sin ATA
+RAMFS_DATA  equ 0xD000  ; 16 archivos x FS_FILE_SECTORS para fallback sin ATA
 DIR_ENTRY_SIZE equ 26
+FS_FILE_SECTORS equ 8
+FS_MAX_FILE_SIZE equ FS_FILE_SECTORS*512
 FS_MODE_NONE equ 0
 FS_MODE_ATA  equ 1
 FS_MODE_RAM  equ 2
@@ -52,6 +54,9 @@ fs_journal_seq dd 0
 fs_create_flag db 0
 fs_write_name_ptr dd 0
 fs_write_buf_ptr dd 0
+fs_io_base_lba dd 0
+fs_block_table times 16*FS_FILE_SECTORS dd 0
+fs_block_ptr dd 0
 
 fs_init_ram:
     mov dword [fs_storage_mode], FS_MODE_RAM
@@ -87,13 +92,14 @@ fs_init_ram:
 
     ; Clear RAM file area and copy demo file content.
     mov edi, RAMFS_DATA
-    mov ecx, (16*512)/4
+    mov ecx, (16*FS_MAX_FILE_SIZE)/4
     xor eax, eax
     rep stosd
     mov esi, ramfs_test_data
     mov edi, RAMFS_DATA
     mov ecx, ramfs_test_end - ramfs_test_data
     rep movsb
+    call fs_rebuild_block_table
     ret
 
 ramfs_test_name db "test.txt",0
@@ -143,6 +149,7 @@ fs_create_file:
     mov ebx, DIR_ENTRY_SIZE
     xor edx,edx
     div ebx
+    imul eax, FS_FILE_SECTORS
     add eax, DATA_LBA
     mov [edi+16], eax   ; LBA
     mov dword [edi+20], 0 ; tamaño
@@ -150,6 +157,7 @@ fs_create_file:
     mov byte [edi+24], al ; flag
     mov byte [edi+25], 0 ; parent(root)
     call fs_clear_entry_data
+    call fs_rebuild_block_table
     call fs_save_dir
     mov eax, 1
     ret
@@ -160,6 +168,7 @@ fs_create_file:
     mov ebx, DIR_ENTRY_SIZE
     xor edx,edx
     div ebx
+    imul eax, FS_FILE_SECTORS
     add eax, DATA_LBA
     mov [edi+16], eax
     mov dword [edi+20], 0
@@ -167,6 +176,7 @@ fs_create_file:
     mov byte [edi+24], al
     mov byte [edi+25], 0
     call fs_clear_entry_data
+    call fs_rebuild_block_table
     call fs_save_dir
     mov eax, 1
     ret
@@ -186,7 +196,7 @@ fs_clear_entry_data:
     shl eax, 9
     mov edi, RAMFS_DATA
     add edi, eax
-    mov ecx, 512/4
+    mov ecx, FS_MAX_FILE_SIZE/4
     xor eax, eax
     rep stosd
     pop edi
@@ -231,17 +241,50 @@ fs_read_file:
     mov esi, RAMFS_DATA
     add esi, eax
     mov edi, APP_POINTER
-    mov ecx, 512
+    mov ecx, FS_MAX_FILE_SIZE
     rep movsb
     pop edi
     pop esi
     pop ecx
     ret
 .read_ata:
+    ; Use the block table so future non-contiguous allocation works.
     push ecx
-    mov ebx, APP_POINTER
-    call floppy_read_sector
+    mov eax, edi
+    sub eax, DIR_BUFFER
+    mov ebx, DIR_ENTRY_SIZE
+    xor edx, edx
+    div ebx
+    imul eax, FS_FILE_SECTORS*4
+    add eax, fs_block_table
+    mov [fs_block_ptr], eax
     pop ecx
+    push ecx
+    push edx
+    xor edx, edx
+.read_ata_loop:
+    push edx
+    mov esi, [fs_block_ptr]
+    mov eax, [esi+edx*4]
+    mov ebx, APP_POINTER
+    mov ecx, edx
+    shl ecx, 9
+    add ebx, ecx
+    call floppy_read_sector
+    pop edx
+    cmp eax, 1
+    jne .read_ata_fail
+    inc edx
+    cmp edx, FS_FILE_SECTORS
+    jb .read_ata_loop
+    pop edx
+    pop ecx
+    mov eax, 1
+    ret
+.read_ata_fail:
+    pop edx
+    pop ecx
+    xor eax, eax
     ret
 .not_match:
     pop esi
@@ -254,6 +297,10 @@ fs_read_file:
     ret
 
 fs_write_file:
+    cmp ecx, FS_MAX_FILE_SIZE
+    jbe .size_ok
+    mov ecx, FS_MAX_FILE_SIZE
+.size_ok:
     mov ebp, ecx            ; preservar tamaño a guardar
     mov [fs_write_name_ptr], esi
     mov [fs_write_buf_ptr], ebx
@@ -290,14 +337,41 @@ fs_write_file:
     shl eax, 9
     mov edi, RAMFS_DATA
     add edi, eax
-    mov ecx, 512
+    mov ecx, FS_MAX_FILE_SIZE
     rep movsb
     pop ecx
     pop edi
     pop esi
     jmp .write_done
 .write_ata:
+    ; Use the block table for each sector instead of assuming base+N.
+    mov eax, edi
+    sub eax, DIR_BUFFER
+    mov ebx, DIR_ENTRY_SIZE
+    xor edx, edx
+    div ebx
+    imul eax, FS_FILE_SECTORS*4
+    add eax, fs_block_table
+    mov [fs_block_ptr], eax
+    push edx
+    xor edx, edx
+.write_ata_loop:
+    push edx
+    mov esi, [fs_block_ptr]
+    mov eax, [esi+edx*4]
+    mov ebx, [fs_write_buf_ptr]
+    mov ecx, edx
+    shl ecx, 9
+    add ebx, ecx
     call floppy_write_sector
+    pop edx
+    cmp eax, 1
+    jne .write_ata_done
+    inc edx
+    cmp edx, FS_FILE_SECTORS
+    jb .write_ata_loop
+.write_ata_done:
+    pop edx
 .write_done:
     mov [edi+20], ebp ; Guarda el tamaño
     call fs_save_dir
@@ -320,6 +394,36 @@ fs_write_file:
     mov ecx, ebp
     call fs_write_file
 .fail_create:
+    ret
+
+
+fs_rebuild_block_table:
+    ; Build a simple contiguous block table: 16 entries x FS_FILE_SECTORS LBAs.
+    pusha
+    mov edi, fs_block_table
+    mov esi, DIR_BUFFER
+    mov ebx, 16
+.entry_loop:
+    cmp byte [esi], 0
+    je .zero_entry
+    mov eax, [esi+16]
+    mov ecx, FS_FILE_SECTORS
+.block_loop:
+    stosd
+    inc eax
+    loop .block_loop
+    jmp .next_entry
+.zero_entry:
+    mov ecx, FS_FILE_SECTORS
+    xor eax, eax
+.zero_loop:
+    stosd
+    loop .zero_loop
+.next_entry:
+    add esi, DIR_ENTRY_SIZE
+    dec ebx
+    jnz .entry_loop
+    popa
     ret
 
 fs_change_dir:
@@ -423,6 +527,7 @@ fs_delete_entry:
     mov ecx,26
     xor eax,eax
     rep stosb
+    call fs_rebuild_block_table
     call fs_save_dir
     mov eax,1
     ret
@@ -433,6 +538,60 @@ fs_delete_entry:
     add edi, DIR_ENTRY_SIZE
     dec ecx
     jnz .find_del
+    xor eax,eax
+    ret
+
+fs_rename_entry:
+    ; ESI = old name, EBX = new name. Rename an existing entry in-place.
+    mov edi, DIR_BUFFER
+    mov ecx,16
+.find_ren:
+    cmp byte [edi],0
+    je .next
+    push edi
+    push esi
+    mov edx,16
+.compare:
+    mov al,[esi]
+    cmp al,[edi]
+    jne .no
+    cmp al,0
+    je .match
+    inc esi
+    inc edi
+    dec edx
+    jnz .compare
+.match:
+    pop esi
+    pop edi
+    push edi
+    mov esi, ebx
+    mov ecx,16
+.copy_new:
+    lodsb
+    cmp al,0
+    je .zero_rest
+    stosb
+    loop .copy_new
+    jmp .ren_done
+.zero_rest:
+    mov al,0
+.zero_loop:
+    stosb
+    loop .zero_loop
+.ren_done:
+    pop edi
+    call fs_rebuild_block_table
+    call fs_save_dir
+    mov eax,1
+    ret
+.no:
+    pop esi
+    pop edi
+.next:
+    add edi, DIR_ENTRY_SIZE
+    dec ecx
+    jnz .find_ren
     xor eax,eax
     ret
 
