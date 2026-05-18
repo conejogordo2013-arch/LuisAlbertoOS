@@ -1,19 +1,165 @@
 ; ------------------------------------------------------------------
-; e1000.lasys - Deteccion minima Intel E1000 (stub real de presencia)
+; e1000.lasys - Driver compacto Intel E1000 (PCI detect + control básico)
 ; ------------------------------------------------------------------
 
 %ifndef E1000_LASYS
 %define E1000_LASYS
 
+E1000_VENDOR_DEVICE equ 0x100E8086
+E1000_CTRL          equ 0x0000
+E1000_STATUS        equ 0x0008
+E1000_IMC           equ 0x00D8
+E1000_RCTL          equ 0x0100
+E1000_RDBAL         equ 0x2800
+E1000_RDBAH         equ 0x2804
+E1000_RDLEN         equ 0x2808
+E1000_RDH           equ 0x2810
+E1000_RDT           equ 0x2818
+E1000_TCTL          equ 0x0400
+E1000_TDBAL         equ 0x3800
+E1000_TDBAH         equ 0x3804
+E1000_TDLEN         equ 0x3808
+E1000_TDH           equ 0x3810
+E1000_TDT           equ 0x3818
+E1000_IOADDR        equ 0x0000
+E1000_IODATA        equ 0x0004
+
+e1000_io_base dd 0
+e1000_status_cache dd 0
+e1000_tx_desc equ 0x12A000
+e1000_rx_desc equ 0x12A100
+e1000_tx_buf  equ 0x12B000
+e1000_rx_buf  equ 0x12C000
+
+e1000_pci_read:
+    ; EAX=config address, OUT EAX=data
+    mov dx, 0x0CF8
+    out dx, eax
+    mov dx, 0x0CFC
+    in eax, dx
+    ret
+
+e1000_reg_write:
+    ; EDX=reg, EAX=value via E1000 BAR I/O window
+    push ebx
+    push eax
+    mov ebx, [e1000_io_base]
+    mov dx, bx
+    mov eax, edx
+    out dx, eax
+    add dx, 4
+    pop eax
+    out dx, eax
+    pop ebx
+    ret
+
+e1000_reg_read:
+    ; EDX=reg, OUT EAX=value
+    push ebx
+    mov ebx, [e1000_io_base]
+    mov dx, bx
+    mov eax, edx
+    out dx, eax
+    add dx, 4
+    in eax, dx
+    pop ebx
+    ret
+
 e1000_probe:
-    ; Sin escaner PCI aun: no detectar por defecto.
+    pusha
+    mov dword [esp+28], 0
     mov dword [e1000_present], 0
-    xor eax, eax
+    mov dword [e1000_io_base], 0
+    xor ebx, ebx                    ; device 0..31 on bus 0, func 0
+.scan:
+    mov eax, 0x80000000
+    mov ecx, ebx
+    shl ecx, 11
+    or eax, ecx
+    call e1000_pci_read
+    cmp eax, E1000_VENDOR_DEVICE
+    je .found
+    inc ebx
+    cmp ebx, 32
+    jb .scan
+    jmp .done
+.found:
+    ; BAR1 usually exposes the E1000 I/O register window.
+    mov eax, 0x80000014
+    mov ecx, ebx
+    shl ecx, 11
+    or eax, ecx
+    call e1000_pci_read
+    test eax, 1
+    jz .done
+    and eax, 0xFFFFFFFC
+    mov [e1000_io_base], eax
+    mov dword [e1000_present], 1
+    mov dword [esp+28], 1
+.done:
+    popa
     ret
 
 e1000_init:
     cmp dword [e1000_present], 1
     jne .no
+    cmp dword [e1000_io_base], 0
+    je .no
+    mov edx, E1000_IMC              ; mask interrupts for polling mode
+    mov eax, 0xFFFFFFFF
+    call e1000_reg_write
+    mov edx, E1000_STATUS
+    call e1000_reg_read
+    mov [e1000_status_cache], eax
+    ; Clear and arm one-descriptor TX/RX rings in identity-mapped DMA memory.
+    mov edi, e1000_tx_desc
+    mov ecx, 64/4
+    xor eax, eax
+    rep stosd
+    mov edi, e1000_rx_desc
+    mov ecx, 64/4
+    xor eax, eax
+    rep stosd
+    mov dword [e1000_rx_desc], e1000_rx_buf
+    mov dword [e1000_rx_desc+4], 0
+
+    mov edx, E1000_TDBAL
+    mov eax, e1000_tx_desc
+    call e1000_reg_write
+    mov edx, E1000_TDBAH
+    xor eax, eax
+    call e1000_reg_write
+    mov edx, E1000_TDLEN
+    mov eax, 16
+    call e1000_reg_write
+    mov edx, E1000_TDH
+    xor eax, eax
+    call e1000_reg_write
+    mov edx, E1000_TDT
+    xor eax, eax
+    call e1000_reg_write
+    mov edx, E1000_TCTL
+    mov eax, 0x0004010A        ; EN | PSP | conservative CT/COLD
+    call e1000_reg_write
+
+    mov edx, E1000_RDBAL
+    mov eax, e1000_rx_desc
+    call e1000_reg_write
+    mov edx, E1000_RDBAH
+    xor eax, eax
+    call e1000_reg_write
+    mov edx, E1000_RDLEN
+    mov eax, 16
+    call e1000_reg_write
+    mov edx, E1000_RDH
+    xor eax, eax
+    call e1000_reg_write
+    mov edx, E1000_RDT
+    xor eax, eax
+    call e1000_reg_write
+    mov edx, E1000_RCTL
+    mov eax, 0x0000801E        ; EN | BAM | UPE/MPE | 2048-byte buffer
+    call e1000_reg_write
     mov dword [e1000_link_up], 1
     mov eax, 1
     ret
@@ -23,14 +169,54 @@ e1000_init:
     ret
 
 e1000_shutdown:
+    cmp dword [e1000_present], 1
+    jne .done
+    mov edx, E1000_RCTL
+    xor eax, eax
+    call e1000_reg_write
+    mov edx, E1000_TCTL
+    xor eax, eax
+    call e1000_reg_write
+.done:
     mov dword [e1000_link_up], 0
     ret
 
 e1000_transmit:
+    ; ECX=len, packet staged at RTL8139_TX_BUF. Uses one DMA TX descriptor.
     cmp dword [e1000_present], 1
     jne .err
     cmp dword [e1000_link_up], 1
     jne .err
+    cmp ecx, 14
+    jb .err
+    cmp ecx, 1518
+    ja .err
+    push ecx
+    mov esi, RTL8139_TX_BUF
+    mov edi, e1000_tx_buf
+    rep movsb
+    pop ecx
+    mov dword [e1000_tx_desc], e1000_tx_buf
+    mov dword [e1000_tx_desc+4], 0
+    mov [e1000_tx_desc+8], cx
+    mov byte [e1000_tx_desc+10], 0
+    mov byte [e1000_tx_desc+11], 0x0B ; EOP | IFCS | RS
+    mov byte [e1000_tx_desc+12], 0
+    mov byte [e1000_tx_desc+13], 0
+    mov word [e1000_tx_desc+14], 0
+    mov edx, E1000_TDT
+    mov eax, 1
+    call e1000_reg_write
+    mov ecx, 0x100000
+.wait_dd:
+    test byte [e1000_tx_desc+12], 1
+    jnz .ok
+    loop .wait_dd
+    jmp .err
+.ok:
+    mov edx, E1000_TDT
+    xor eax, eax
+    call e1000_reg_write
     inc dword [e1000_tx_packets]
     mov eax, 1
     ret
@@ -40,7 +226,28 @@ e1000_transmit:
     ret
 
 e1000_receive:
-    ; Aun no hay RX ring para e1000.
+    cmp dword [e1000_present], 1
+    jne .none
+    cmp dword [e1000_link_up], 1
+    jne .none
+    test byte [e1000_rx_desc+12], 1
+    jz .none
+    movzx ecx, word [e1000_rx_desc+8]
+    cmp ecx, 1518
+    ja .drop
+    push ecx
+    mov esi, e1000_rx_buf
+    mov edi, RTL8139_LAST_RX_BUF
+    rep movsb
+    pop ecx
+    mov [rtl_last_rx_len], ecx
+.drop:
+    mov byte [e1000_rx_desc+12], 0
+    mov edx, E1000_RDT
+    xor eax, eax
+    call e1000_reg_write
+    ret
+.none:
     xor ecx, ecx
     ret
 

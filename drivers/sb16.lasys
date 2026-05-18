@@ -42,8 +42,43 @@ sb16_probe:
     xor eax, eax
     ret
 
+sb16_wait_write:
+    push ecx
+    push edx
+    mov dx, 0x22C
+    mov ecx, 0x10000
+.wait:
+    in al, dx
+    test al, 0x80
+    jz .ok
+    loop .wait
+.ok:
+    pop edx
+    pop ecx
+    ret
+
+sb16_write_dsp:
+    ; AL = comando DSP
+    push eax
+    call sb16_wait_write
+    mov dx, 0x22C
+    pop eax
+    out dx, al
+    ret
+
 sb16_beep:
-    ; Placeholder: confirmar ruta activa SB16 sin colgar sistema.
+    cmp dword [sb16_present], 1
+    jne .done
+    pusha
+    mov al, 0xD1            ; speaker on
+    call sb16_write_dsp
+    mov ecx, 0x1FFFF
+.delay:
+    loop .delay
+    mov al, 0xD3            ; speaker off
+    call sb16_write_dsp
+    popa
+.done:
     ret
 
 %endif
