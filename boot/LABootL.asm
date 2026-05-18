@@ -27,6 +27,7 @@ print_loop:
     jmp print_loop
 
 load_kernel:
+    call enable_a20
     ; BIOS reads must not cross track boundaries on many machines.
     ; Load one sector at a time from CHS 0/0/2 into 0000:1000.
     mov ax, KERNEL_LOAD_SEG
@@ -82,6 +83,18 @@ disk_error:
     cli
     hlt
     jmp .halt
+
+
+; Enable A20 so accesses above 1MiB (heap/page structures) do not wrap.
+enable_a20:
+    in al, 0x92
+    test al, 0x02
+    jnz .done
+    or al, 0x02
+    and al, 0xFE
+    out 0x92, al
+.done:
+    ret
 
 boot_msg db 'LuisAlbertoOS Boot OK. Loading...', 13, 10, 0
 disk_err_msg db 'Disk read error', 13, 10, 0
