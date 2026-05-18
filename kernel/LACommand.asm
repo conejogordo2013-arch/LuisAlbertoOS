@@ -39,6 +39,7 @@ cmd_img       db "img",0
 cmd_help      db "help",0
 cmd_net       db "net",0
 cmd_devices   db "devices",0
+cmd_data      db "data",0
 cmd_beep      db "beep",0
 cmd_pwd       db "pwd",0
 cmd_meminfo   db "meminfo",0
@@ -139,6 +140,7 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "net    - Subsistema de red (net help)",0x0A, \
                 "help   - Muestra esta ayuda",0x0A, \
                 "devices- Estado de drivers",0x0A, \
+                "data   - Diagnostico boot/kernel/memoria",0x0A, \
                 "beep   - Prueba audio AC97",0x0A, \
                 "pwd    - Muestra ruta actual",0x0A, \
                 "meminfo- Estado memoria",0x0A, \
@@ -397,6 +399,28 @@ msg_task_curr     db 0x0A,"Current: ",0
 msg_net_len       db 0x0A,"LEN: ",0
 msg_net_hex       db 0x0A,"HEX:",0x0A,0
 msg_net_ascii     db 0x0A,"ASCII:",0x0A,0
+msg_data_hdr      db 0x0A,"-- DATA / Kernel Diagnostics --",0x0A,0
+msg_data_boot     db "Bootloader: BIOS 0x7C00 -> kernel 0x00001000, sectors: ",0
+msg_data_total    db "Total Memory: 0x",0
+msg_data_kphys    db "Kernel physical address: 0x",0
+msg_data_kvirt    db "Kernel virtual address: 0x",0
+msg_data_kstart   db "KERNEL START: 0x",0
+msg_data_kend     db "KERNEL END: 0x",0
+msg_data_ksize    db "Kernel image bytes: 0x",0
+msg_data_heap     db "Heap start/current/end: 0x",0
+msg_data_mid      db " / 0x",0
+msg_data_malloc   db "Malloced Addresses last/count/size: 0x",0
+msg_data_freed    db "Freed Adresses frame_last/frame_count/kfree_last/kfree_count: 0x",0
+msg_data_frames   db "Frames last alloc/free/counts: 0x",0
+msg_data_devices  db "Devices FS/NET/AUDIO/ATA/FLOPPY/CD/SATA: 0x",0
+msg_data_tasks    db "TASKS current/count/switches: 0x",0
+msg_data_dump     db "Memory Dump @KERNEL START:",0x0A,0
+msg_data_errors   db "Memory Errors Adresses last/count/kmalloc_fail/frame_fail: 0x",0
+msg_data_vm       db "Paging/CR3/IDT/GDT: 0x",0
+msg_data_irqs     db "IRQ/syscall/exceptions: 0x",0
+msg_data_regions  db "Memory Regions FRAME_BITMAP/PD/PT0/KHEAP_START/KHEAP_END: 0x",0
+msg_data_entries  db "Memory Entrys TOTAL_FRAMES/RESERVED_FRAMES/BITMAP_BYTES/PAGE_SIZE: 0x",0
+msg_data_devaddr  db "Devices Memory Adresses RTL_IO/RTL_RX/RTL_TX/E1K_IO/E1K_TXD/E1K_RXD: 0x",0
 
 ; Buffers y Variables de Red
 hex_arg_ptr       dd 0
@@ -550,6 +574,11 @@ execute:
     call strcmp
     cmp eax, 0
     je do_devices
+
+    mov edi, cmd_data
+    call strcmp
+    cmp eax, 0
+    je do_data
 
     mov edi, cmd_beep
     call strcmp
@@ -1141,6 +1170,265 @@ do_devices:
     mov esi, msg_dev_missing
 .e1000_out:
     call api_print_string
+    jmp shell_loop
+
+do_data:
+    mov esi, msg_data_hdr
+    call api_print_string
+
+    mov esi, msg_data_boot
+    call api_print_string
+    mov eax, 80
+    call print_hex32
+
+    mov esi, msg_data_total
+    call api_print_string
+    mov eax, [mem_total_bytes]
+    call print_hex32
+
+    mov esi, msg_data_kphys
+    call api_print_string
+    mov eax, kernel_entry
+    call print_hex32
+
+    mov esi, msg_data_kvirt
+    call api_print_string
+    mov eax, kernel_entry
+    call print_hex32
+
+    mov esi, msg_data_kstart
+    call api_print_string
+    mov eax, kernel_entry
+    call print_hex32
+
+    mov esi, msg_data_kend
+    call api_print_string
+    mov eax, kernel_image_end
+    call print_hex32
+
+    mov esi, msg_data_ksize
+    call api_print_string
+    mov eax, kernel_image_end
+    sub eax, kernel_entry
+    call print_hex32
+
+    mov esi, msg_data_heap
+    call api_print_string
+    mov eax, KHEAP_START
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [heap_ptr]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [heap_end]
+    call print_hex32
+
+    mov esi, msg_data_malloc
+    call api_print_string
+    mov eax, [kmalloc_last_addr]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [kmalloc_count]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [kmalloc_last_size]
+    call print_hex32
+
+    mov esi, msg_data_freed
+    call api_print_string
+    mov eax, [last_frame_free]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [frame_free_count]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [kfree_last_addr]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [kfree_count]
+    call print_hex32
+
+    mov esi, msg_data_frames
+    call api_print_string
+    mov eax, [last_frame_alloc]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [last_frame_free]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [frame_alloc_count]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [frame_free_count]
+    call print_hex32
+
+    mov esi, msg_data_devices
+    call api_print_string
+    mov eax, [fs_driver_available]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [net_driver_available]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [audio_driver_available]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [ata_present]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [floppy_present]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [cdrom_present]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [sata_present]
+    call print_hex32
+
+    mov esi, msg_data_tasks
+    call api_print_string
+    mov eax, [sched_current]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [sched_task_count]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [sched_switch_count]
+    call print_hex32
+
+    mov esi, msg_data_vm
+    call api_print_string
+    mov eax, [paging_enabled]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [page_directory_phys]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, IDT_BASE
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, gdt_start
+    call print_hex32
+
+    mov esi, msg_data_irqs
+    call api_print_string
+    mov eax, [irq_ticks]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [syscall_count]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [exception_count]
+    call print_hex32
+
+    mov esi, msg_data_regions
+    call api_print_string
+    mov eax, FRAME_BITMAP
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, PAGE_DIR_BASE
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, PAGE_TABLE0_BASE
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, KHEAP_START
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [heap_end]
+    call print_hex32
+
+    mov esi, msg_data_entries
+    call api_print_string
+    mov eax, TOTAL_FRAMES
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, RESERVED_FRAMES
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, FRAME_BITMAP_BYTES
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, PAGE_SIZE
+    call print_hex32
+
+    mov esi, msg_data_devaddr
+    call api_print_string
+    mov eax, RTL8139_IO_BASE
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, RTL8139_RX_BUF
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, RTL8139_TX_BUF
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [e1000_io_base]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, e1000_tx_desc
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, e1000_rx_desc
+    call print_hex32
+
+    mov esi, msg_data_errors
+    call api_print_string
+    mov eax, [memory_error_addr]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [memory_error_count]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [kmalloc_fail_count]
+    call print_hex32_inline
+    mov esi, msg_data_mid
+    call api_print_string
+    mov eax, [frame_alloc_fail_count]
+    call print_hex32
+
+    mov esi, msg_data_dump
+    call api_print_string
+    mov esi, kernel_entry
+    mov ecx, 64
+    call print_memory_dump
     jmp shell_loop
 
 do_beep:
@@ -2945,6 +3233,51 @@ print_char:
     mov byte [char_buffer+1], 0
     mov esi, char_buffer
     call api_print_string
+    popa
+    ret
+
+print_hex32_inline:
+    pusha
+    mov edi, hex_buffer
+    mov ecx, 8
+.hex_loop:
+    rol eax, 4
+    mov bl, al
+    and bl, 0x0F
+    cmp bl, 9
+    jle .digit
+    add bl, 55
+    jmp .store
+.digit:
+    add bl, 48
+.store:
+    mov [edi], bl
+    inc edi
+    loop .hex_loop
+    mov byte [edi], 0
+    mov esi, hex_buffer
+    call api_print_string
+    popa
+    ret
+
+print_memory_dump:
+    pusha
+    xor edx, edx
+.dump_loop:
+    cmp ecx, 0
+    je .done
+    lodsb
+    call print_hex8
+    inc edx
+    dec ecx
+    test edx, 0x0F
+    jnz .dump_loop
+    push esi
+    mov esi, msg_newline
+    call api_print_string
+    pop esi
+    jmp .dump_loop
+.done:
     popa
     ret
 
