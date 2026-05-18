@@ -4,8 +4,7 @@
 KERNEL_LOAD_SEG  equ 0x0000
 KERNEL_LOAD_OFF  equ 0x1000
 KERNEL_SECTORS   equ 80
-DEFAULT_SPT      equ 18
-DEFAULT_HEADS    equ 2
+SECTORS_PER_TRK  equ 18
 
 start:
     cli
