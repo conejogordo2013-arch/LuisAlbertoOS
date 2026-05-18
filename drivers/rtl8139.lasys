@@ -30,6 +30,7 @@ RTL_CONFIG1    equ 0x52
 ; =========================
 RTL8139_RX_BUF equ 0x120000    ; 8KB RX buffer (reserved in memory.lasys)
 RTL8139_TX_BUF equ 0x124000    ; TX buffer (reserved in memory.lasys)
+RTL8139_LAST_RX_BUF equ 0x128000 ; last RX packet copy for shell dumps/parsers
 
 ; =========================
 ; VARIABLES
@@ -240,6 +241,17 @@ rtl8139_receive:
     cmp ecx, 1792
     ja .rx_error
     mov [rtl_last_rx_len], ecx
+
+    ; Copy packet payload out of the RX ring before CAPR advances.
+    push esi
+    push edi
+    push ecx
+    add esi, 4
+    mov edi, RTL8139_LAST_RX_BUF
+    rep movsb
+    pop ecx
+    pop edi
+    pop esi
 
     ; calcular nuevo offset
     mov eax, [rtl_rx_offset]

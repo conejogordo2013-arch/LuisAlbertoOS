@@ -177,4 +177,37 @@ net_build_dns_arp_request:
     call net_build_arp_request
     ret
 
+net_driver_init:
+    cmp dword [active_net_driver], 2
+    je .e
+    call rtl8139_init
+    ret
+.e:
+    call e1000_init
+    ret
+net_driver_shutdown:
+    cmp dword [active_net_driver], 2
+    je .es
+    call rtl8139_shutdown
+    ret
+.es:
+    call e1000_shutdown
+    ret
+net_driver_transmit:
+    cmp dword [active_net_driver], 2
+    je .et
+    call rtl8139_transmit
+    ret
+.et:
+    call e1000_transmit
+    ret
+net_driver_receive:
+    cmp dword [active_net_driver], 2
+    je .er
+    call rtl8139_receive
+    ret
+.er:
+    call e1000_receive
+    ret
+
 %endif
