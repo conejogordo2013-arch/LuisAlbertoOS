@@ -57,6 +57,14 @@ oskrnl_main:
     mov dword [active_audio_driver], 2
 .after_sb16_default:
     call e1000_probe
+    cmp dword [net_driver_available], 0
+    jne .after_e1000_default
+    cmp dword [e1000_present], 1
+    jne .after_e1000_default
+    mov dword [active_net_driver], 2
+    call e1000_init
+    mov dword [net_driver_available], eax
+.after_e1000_default:
     call cdrom_probe
     call sata_probe
     call floppy_probe_legacy

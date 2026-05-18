@@ -7,8 +7,8 @@
 %ifndef FS_LASYS
 %define FS_LASYS
 
-DIR_LBA     equ 96
-DATA_LBA    equ 97
+DIR_LBA     equ 120
+DATA_LBA    equ 121
 DIR_BUFFER  equ 0x5000  ; Directorio en memoria
 FILE_BUFFER equ 0x6000  ; Buffer I/O
 APP_POINTER equ 0x7000  ; Puntero a app cargada

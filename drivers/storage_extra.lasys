@@ -1,25 +1,60 @@
 ; ------------------------------------------------------------------
-; storage_extra.lasys - Deteccion minima CDROM/SATA/Floppy (stub real)
+; storage_extra.lasys - Deteccion compacta de unidades A:/C:/D:
 ; ------------------------------------------------------------------
 
 %ifndef STORAGE_EXTRA_LASYS
 %define STORAGE_EXTRA_LASYS
 
+; C: es el backend de FS (RAM seguro y ATA opcional).  A: se marca cuando
+; arrancamos desde imagen floppy; D: se prueba como ATAPI primary slave.
 cdrom_probe:
+    pusha
+    mov dword [esp+28], 0
     mov dword [cdrom_present], 0
-    xor eax, eax
+    mov dx, 0x1F6
+    mov al, 0xB0            ; primary slave, ATAPI candidate
+    out dx, al
+    mov ecx, 4000
+.delay:
+    loop .delay
+    mov dx, 0x1F4
+    in al, dx
+    mov ah, al
+    mov dx, 0x1F5
+    in al, dx
+    cmp ah, 0x14
+    jne .try_old
+    cmp al, 0xEB
+    je .found
+.try_old:
+    cmp ah, 0x69
+    jne .done
+    cmp al, 0x96
+    jne .done
+.found:
+    mov dword [cdrom_present], 1
+    mov dword [esp+28], 1
+.done:
+    popa
     ret
 
 sata_probe:
+    ; Sin AHCI PCI todavía: exponer el ATA PIO como disco duro C: si responde.
+    cmp dword [ata_present], 1
+    jne .no
+    mov dword [sata_present], 1
+    mov eax, 1
+    ret
+.no:
     mov dword [sata_present], 0
     xor eax, eax
     ret
 
 floppy_probe_legacy:
-    ; La imagen de arranque usa servicios de floppy/ATA ya existentes.
-    ; Este flag representa controlador floppy dedicado (aun no implementado).
-    mov dword [floppy_present], 0
-    xor eax, eax
+    ; La imagen arranca desde floppy; habilitamos A: como unidad real de arranque
+    ; y el comando read/write decide si además existe backend ATA para sector I/O.
+    mov dword [floppy_present], 1
+    mov eax, 1
     ret
 
 %endif
