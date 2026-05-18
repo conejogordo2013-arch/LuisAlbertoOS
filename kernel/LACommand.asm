@@ -447,6 +447,8 @@ read_key:
     je read_key
     cmp al, 0x0A
     je parse_command
+    cmp al, 0x0D
+    je parse_command
     cmp al, 0x08
     je handle_backspace
 
@@ -474,6 +476,13 @@ parse_command:
     mov byte [edi], 0
     mov esi, cmd_buffer
     mov dword [arg_ptr], 0
+
+trim_leading_spaces:
+    cmp byte [esi], ' '
+    jne find_space
+    inc esi
+    jmp trim_leading_spaces
+
 find_space:
     cmp byte [esi], 0
     je execute
@@ -481,12 +490,33 @@ find_space:
     je split
     inc esi
     jmp find_space
+
 split:
     mov byte [esi], 0
     inc esi
+
+skip_arg_spaces:
+    cmp byte [esi], ' '
+    jne store_arg
+    inc esi
+    jmp skip_arg_spaces
+
+store_arg:
+    cmp byte [esi], 0
+    je execute
     mov dword [arg_ptr], esi
 
 execute:
+    cmp byte [cmd_buffer], ' '
+    jne .cmd_ready
+    mov edi, cmd_buffer
+.shift_loop:
+    mov al, [edi+1]
+    mov [edi], al
+    inc edi
+    cmp al, 0
+    jne .shift_loop
+.cmd_ready:
     mov esi, cmd_buffer
     cmp byte [esi], 0
     je shell_loop
