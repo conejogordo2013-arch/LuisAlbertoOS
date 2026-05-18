@@ -12,8 +12,8 @@ start:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov sp, 0x7C00
-    sti
+    mov sp, 0x7000
+    ; Keep IRQs disabled in stage-1 loader for deterministic disk reads.
     mov [boot_drive], dl
 
     ; Print Boot Message
