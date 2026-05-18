@@ -1,5 +1,5 @@
 [BITS 32]
-[ORG 0x3800]
+[ORG 0x81000]
 
 start:
     mov esi, edit_msg

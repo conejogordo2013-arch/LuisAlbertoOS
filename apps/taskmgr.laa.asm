@@ -1,5 +1,5 @@
 [BITS 32]
-[ORG 0x3C00]
+[ORG 0x82000]
 
 start:
     mov esi, task_msg

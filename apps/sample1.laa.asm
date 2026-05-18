@@ -1,5 +1,5 @@
 [BITS 32]
-[ORG 0x3400]
+[ORG 0x80000]
 
 start:
     ; EBX contains the address of api_table

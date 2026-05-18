@@ -10,16 +10,17 @@ mkdir -p boot kernel apps drivers libs bin
 
 # Disk layout (LBA sectors, 512 bytes each):
 #   0       boot sector
-#   1..40   kernel load window read by boot/LABootL.asm (40 sectors)
+#   1..60   kernel load window read by boot/LABootL.asm (60 sectors)
 #   64..    apps and optional demo data, safely outside the kernel window
-KERNEL_LOAD_SECTORS=40
+KERNEL_LOAD_SECTORS=60
 KERNEL_START_LBA=1
 APP_SAMPLE_LBA=64
 APP_TEXTEDIT_LBA=66
 APP_TASKMGR_LBA=68
 APP_LATEXTEDIT_LBA=70
 FS_DIR_LBA=96
-FS_DATA_LBA=97
+FS_BLOCK_LBA=97
+FS_DATA_LBA=98
 
 # 1. Bootloader and kernel
 nasm -f bin boot/LABootL.asm -o bin/boot.bin
@@ -57,7 +58,7 @@ dd if=bin/textedit.laa   of=LuisAlbertoOS.img seek=${APP_TEXTEDIT_LBA} conv=notr
 dd if=bin/taskmgr.laa    of=LuisAlbertoOS.img seek=${APP_TASKMGR_LBA} conv=notrunc status=none
 dd if=bin/LATextedit.laa of=LuisAlbertoOS.img seek=${APP_LATEXTEDIT_LBA} conv=notrunc status=none
 
-# 6. Mock FS directory (optional demo data). Entry size: 26 bytes.
+# 6. Mock FS directory + block table (optional demo data). Entry size: 26 bytes.
 FS_DATA_LBA=${FS_DATA_LBA} python3 - <<'PY'
 import os
 from pathlib import Path
@@ -71,7 +72,16 @@ entry[25] = 0  # root parent
 Path("bin/mock_dir.bin").write_bytes(entry)
 PY
 dd if=bin/mock_dir.bin of=LuisAlbertoOS.img seek=${FS_DIR_LBA} conv=notrunc status=none
-printf 'Hello from FS!\n\0' > bin/mock_test.txt
+python3 - <<'PY'
+from pathlib import Path
+block = bytearray(512)
+for i in range(15):
+    block[i] = i + 2  # next block index + 1
+block[15] = 0xFF
+Path('bin/mock_blocks.bin').write_bytes(block)
+PY
+dd if=bin/mock_blocks.bin of=LuisAlbertoOS.img seek=${FS_BLOCK_LBA} conv=notrunc status=none
+printf 'Hello from FS multi-sector!\n\0' > bin/mock_test.txt
 dd if=bin/mock_test.txt of=LuisAlbertoOS.img seek=${FS_DATA_LBA} conv=notrunc status=none
 
 echo "Build complete."
