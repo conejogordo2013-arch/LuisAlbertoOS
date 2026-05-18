@@ -8,7 +8,10 @@ oskrnl_main:
     mov esi, welcome_msg
     call api_print_string
     
-    ; Inicializar subsistemas núcleo
+    ; Inicializar subsistemas núcleo. El IDT/PIC/PIT se configura, pero las
+    ; IRQs quedan deshabilitadas durante el arranque: el shell lee teclado por
+    ; polling y algunas BIOS/emuladores reinician con IRQ0 activa demasiado
+    ; pronto. interrupts_enable queda disponible para activar timer luego.
     call interrupts_init
     call mem_init
     call paging_init
@@ -20,55 +23,33 @@ oskrnl_main:
     mov esi, msg_sched_ready
     call api_print_string
 
-    ; Inicializar almacenamiento. La terminal usa RAM FS por defecto para
-    ; arrancar igual aunque no exista ATA/IDE. El driver ATA se sondea solo
-    ; como dispositivo opcional y nunca bloquea comandos de archivos.
-    call floppy_probe
+    ; Arranque seguro: el filesystem RAM permite llegar siempre al shell.
+    ; No sondeamos hardware opcional aquí porque varias VMs/BIOS reinician al
+    ; tocar puertos de dispositivos ausentes. Los comandos del shell pueden
+    ; activar/probar drivers bajo demanda (por ejemplo net up/reset).
+    mov dword [ata_present], 0
     mov dword [fs_driver_available], 1
+    call floppy_probe_legacy
     mov esi, msg_fs_ram
     call api_print_string
 
-    call rtl8139_init
-    mov [net_driver_available], eax
+    mov dword [net_driver_available], 0
     mov dword [active_net_driver], 0
-    cmp eax, 0
-    jne .net_ok
+    mov dword [rtl8139_present], 0
+    mov dword [e1000_present], 0
+    mov dword [e1000_link_up], 0
     mov esi, msg_net_missing
     call api_print_string
-.net_ok:
-    mov dword [active_net_driver], 1
 
-    call ac97_init
-    mov [audio_driver_available], eax
+    mov dword [audio_driver_available], 0
     mov dword [active_audio_driver], 0
-    cmp eax, 0
-    jne .audio_ok
+    mov dword [ac97_present], 0
+    mov dword [sb16_present], 0
     mov esi, msg_audio_missing
     call api_print_string
-    jmp .audio_done
-.audio_ok:
-    mov dword [active_audio_driver], 1
-    call ac97_beep
-.audio_done:
-    call sb16_probe
-    cmp dword [active_audio_driver], 0
-    jne .after_sb16_default
-    cmp dword [sb16_present], 1
-    jne .after_sb16_default
-    mov dword [active_audio_driver], 2
-.after_sb16_default:
-    call e1000_probe
-    cmp dword [net_driver_available], 0
-    jne .after_e1000_default
-    cmp dword [e1000_present], 1
-    jne .after_e1000_default
-    mov dword [active_net_driver], 2
-    call e1000_init
-    mov dword [net_driver_available], eax
-.after_e1000_default:
-    call cdrom_probe
-    call sata_probe
-    call floppy_probe_legacy
+
+    mov dword [cdrom_present], 0
+    mov dword [sata_present], 0
 
     call scheduler_register_kernel_main
     call shell_start
