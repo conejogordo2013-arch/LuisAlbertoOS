@@ -34,8 +34,10 @@ oskrnl_main:
     jne .net_ok
     mov esi, msg_net_missing
     call api_print_string
+    jmp .net_done
 .net_ok:
     mov dword [active_net_driver], 1
+.net_done:
 
     call ac97_init
     mov [audio_driver_available], eax
