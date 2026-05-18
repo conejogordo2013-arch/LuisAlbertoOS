@@ -38,6 +38,7 @@ syscall_count   dd 0
 %endmacro
 
 interrupts_init:
+    cli
     pusha
     mov edi, IDT_BASE
     mov ecx, 256*8/4
@@ -101,9 +102,12 @@ interrupts_init:
     out 0x40,al
 
     lidt [idt_ptr]
-    sti
     mov dword [interrupts_ready],1
     popa
+    ret
+
+interrupts_enable:
+    sti
     ret
 
 

@@ -13,6 +13,7 @@ oskrnl_main:
     call mem_init
     call paging_init
     call scheduler_init
+    call interrupts_enable
 
     mov esi, msg_mem_ready
     call api_print_string
