@@ -13,7 +13,8 @@ start:
     mov es, ax
     mov ss, ax
     mov sp, 0x7C00
-    sti
+    ; Keep IRQs masked during early boot. BIOS INT calls still work with IF=0
+    ; and this avoids random hardware IRQ handlers stomping our tiny stack.
     mov [boot_drive], dl
 
     ; Print Boot Message
