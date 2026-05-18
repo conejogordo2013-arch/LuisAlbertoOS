@@ -1,0 +1,47 @@
+; ------------------------------------------------------------------
+; e1000.lasys - Deteccion minima Intel E1000 (stub real de presencia)
+; ------------------------------------------------------------------
+
+%ifndef E1000_LASYS
+%define E1000_LASYS
+
+e1000_probe:
+    ; Sin escaner PCI aun: no detectar por defecto.
+    mov dword [e1000_present], 0
+    xor eax, eax
+    ret
+
+e1000_init:
+    cmp dword [e1000_present], 1
+    jne .no
+    mov dword [e1000_link_up], 1
+    mov eax, 1
+    ret
+.no:
+    mov dword [e1000_link_up], 0
+    xor eax, eax
+    ret
+
+e1000_shutdown:
+    mov dword [e1000_link_up], 0
+    ret
+
+e1000_transmit:
+    cmp dword [e1000_present], 1
+    jne .err
+    cmp dword [e1000_link_up], 1
+    jne .err
+    inc dword [e1000_tx_packets]
+    mov eax, 1
+    ret
+.err:
+    inc dword [e1000_tx_errors]
+    xor eax, eax
+    ret
+
+e1000_receive:
+    ; Aun no hay RX ring para e1000.
+    xor ecx, ecx
+    ret
+
+%endif

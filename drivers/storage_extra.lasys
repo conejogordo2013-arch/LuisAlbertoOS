@@ -1,0 +1,25 @@
+; ------------------------------------------------------------------
+; storage_extra.lasys - Deteccion minima CDROM/SATA/Floppy (stub real)
+; ------------------------------------------------------------------
+
+%ifndef STORAGE_EXTRA_LASYS
+%define STORAGE_EXTRA_LASYS
+
+cdrom_probe:
+    mov dword [cdrom_present], 0
+    xor eax, eax
+    ret
+
+sata_probe:
+    mov dword [sata_present], 0
+    xor eax, eax
+    ret
+
+floppy_probe_legacy:
+    ; La imagen de arranque usa servicios de floppy/ATA ya existentes.
+    ; Este flag representa controlador floppy dedicado (aun no implementado).
+    mov dword [floppy_present], 0
+    xor eax, eax
+    ret
+
+%endif

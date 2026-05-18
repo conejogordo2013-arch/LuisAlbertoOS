@@ -29,28 +29,43 @@ oskrnl_main:
 
     call rtl8139_init
     mov [net_driver_available], eax
+    mov dword [active_net_driver], 0
     cmp eax, 0
     jne .net_ok
     mov esi, msg_net_missing
     call api_print_string
 .net_ok:
+    mov dword [active_net_driver], 1
 
     call ac97_init
     mov [audio_driver_available], eax
+    mov dword [active_audio_driver], 0
     cmp eax, 0
     jne .audio_ok
     mov esi, msg_audio_missing
     call api_print_string
     jmp .audio_done
 .audio_ok:
+    mov dword [active_audio_driver], 1
     call ac97_beep
 .audio_done:
+    call sb16_probe
+    cmp dword [active_audio_driver], 0
+    jne .after_sb16_default
+    cmp dword [sb16_present], 1
+    jne .after_sb16_default
+    mov dword [active_audio_driver], 2
+.after_sb16_default:
+    call e1000_probe
+    call cdrom_probe
+    call sata_probe
+    call floppy_probe_legacy
 
     call scheduler_register_kernel_main
     call shell_start
     ret
 
-welcome_msg db "Welcome to LuisAlbertoOS Core v1.0 Compilation 1.2026.3.25.5p.51", 0
+welcome_msg db "Welcome to LuisAlbertoOS Core v1.0 Compilation 1.2.57.796", 0
 msg_fs_ram db 0x0A,"[OK] Filesystem RAM activo. ATA queda como dispositivo opcional.",0
 msg_net_missing db 0x0A,"[WARN] RTL8139 no detectado. Comandos de red no disponibles.",0
 msg_audio_missing db 0x0A,"[WARN] AC97 no detectado. Comandos de audio no disponibles.",0

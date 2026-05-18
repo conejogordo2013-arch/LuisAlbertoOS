@@ -11,6 +11,7 @@ global floppy_probe
 
 msg_floppy_err db "ATA read/write error", 0x0A, 0
 ata_present dd 0
+ata_last_status dd 0
 
 floppy_probe:
     push edx
@@ -79,13 +80,17 @@ floppy_read_sector:
     mov ecx, 256            ; Read 256 words (512 bytes)
     mov edi, ebx
     rep insw
+    mov dword [ata_last_status], 1
     popa
+    mov eax, 1
     ret
 
 .error:
+    mov dword [ata_last_status], 0
     mov esi, msg_floppy_err
     call api_print_string
     popa
+    xor eax, eax
     ret
 
 ; Input: EAX = LBA Sector, EBX = Memory Buffer
@@ -156,12 +161,16 @@ floppy_write_sector:
     loop .wait_flush
     jmp .error
 .write_ok:
+    mov dword [ata_last_status], 1
     popa
+    mov eax, 1
     ret
 
 .error:
+    mov dword [ata_last_status], 0
     mov esi, msg_floppy_err
     call api_print_string
     popa
+    xor eax, eax
     ret
 %endif
