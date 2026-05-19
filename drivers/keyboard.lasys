@@ -187,13 +187,13 @@ kbd_irq_push_scancode:
 
 kbd_irq_pop_scancode:
     ; OUT: EAX=1 and AL=scancode if available; EAX=0 if empty
-    mov eax, [kbd_irq_tail]
-    cmp eax, [kbd_irq_head]
+    mov edx, [kbd_irq_tail]
+    cmp edx, [kbd_irq_head]
     je .empty
-    and eax, 63
-    mov al, [kbd_irq_ring + eax]
+    and edx, 63
+    mov al, [kbd_irq_ring + edx]
     inc dword [kbd_irq_tail]
-    mov eax, 1
+    mov ah, 1
     ret
 .empty:
     xor eax, eax
