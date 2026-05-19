@@ -7,6 +7,98 @@
 
 VGA_VRAM    equ 0xA0000
 BMP_LOAD_AD equ 0x7000  ; Definido como APP_POINTER en fs.lasys
+desk_cmd_min    dd 0
+desk_prev_left  dd 0
+
+vga_desktop_view:
+    mov esi, vga_regs_13h
+    call vga_write_regs
+.frame:
+    mov eax, [mouse_buttons]
+    and eax, 1
+    mov ebx, [desk_prev_left]
+    mov [desk_prev_left], eax
+    cmp eax, 1
+    jne .no_click
+    cmp ebx, 0
+    jne .no_click
+    mov ecx, [mouse_x]
+    add ecx, 160
+    mov edx, [mouse_y]
+    neg edx
+    add edx, 100
+    cmp ecx, 268
+    jb .chk_max
+    cmp ecx, 283
+    ja .chk_max
+    cmp edx, 20
+    jb .chk_max
+    cmp edx, 30
+    ja .chk_max
+    xor dword [desk_cmd_min], 1
+    jmp .no_click
+.chk_max:
+.no_click:
+    mov edi, VGA_VRAM
+    mov ecx, 320*200
+    mov al, 1
+    rep stosb
+    mov edi, VGA_VRAM + (320*188)
+    mov ecx, 320*12
+    mov al, 8
+    rep stosb
+    cmp dword [desk_cmd_min], 1
+    je .status_only
+    mov edi, VGA_VRAM + (320*18) + 24
+    mov ebx, 130
+.wrow:
+    push ebx
+    mov ecx, 272
+    mov al, 7
+    rep stosb
+    add edi, 320-272
+    pop ebx
+    dec ebx
+    jnz .wrow
+    ; title + botones (_/[])
+    mov edi, VGA_VRAM + (320*18) + 24
+    mov ecx, 272*10
+    mov al, 4
+ .tbar2:
+    rep stosb
+    mov edi, VGA_VRAM + (320*20) + 268
+    mov ecx, 14
+    mov al, 14
+    rep stosb
+    add edi, 4
+.status_only:
+    nop
+    mov eax, [mouse_x]
+    add eax, 160
+    mov edx, [mouse_y]
+    neg edx
+    add edx, 100
+    cmp eax, 1
+    jb .poll
+    cmp eax, 318
+    ja .poll
+    cmp edx, 1
+    jb .poll
+    cmp edx, 198
+    ja .poll
+    imul ebx, edx, 320
+    add ebx, eax
+    mov byte [VGA_VRAM + ebx], 15
+.poll:
+    in al, 0x64
+    test al, 1
+    jz .frame
+    in al, 0x60
+    cmp al, 0x01
+    jne .frame
+    mov esi, vga_regs_3h
+    call vga_write_regs
+    ret
 
 vga_image_view:
     ; 1. Cambiar a Modo Gráfico 13h (320x200x256) programando puertos VGA

@@ -12,6 +12,7 @@ idt_ptr:
 interrupts_ready dd 0
 irq_ticks dd 0
 scheduler_ticks dd 0
+pit_hz dd 100
 irq1_keys dd 0
 exception_count dd 0
 last_exception  dd 0
@@ -76,6 +77,7 @@ interrupts_init:
     SET_IDT isr_exc19, 19
     SET_IDT isr_irq0, 32
     SET_IDT isr_irq1, 33
+    SET_IDT isr_irq12, 44
     SET_IDT_USER isr_syscall80, 128
 
     ; PIC remap 0x20/0x28
@@ -94,25 +96,49 @@ interrupts_init:
     out 0x21,al
     out 0xA1,al
 
-    ; Unmask IRQ0 only. IRQ1 stays masked because the current shell
-    ; reads the keyboard by polling port 0x60; draining it in the IRQ
-    ; handler would make interactive input unreliable.
-    mov al,0xFE
+    ; Unmask IRQ0 + IRQ1 + IRQ2(cascade para slave/IRQ12)
+    mov al,0xF8
     out 0x21,al
-    mov al,0xFF
+    ; Unmask IRQ12 (slave IRQ4)
+    mov al,0xEF
     out 0xA1,al
 
-    ; PIT @100Hz
-    mov al,0x36
-    out 0x43,al
-    mov ax,11931
-    out 0x40,al
-    mov al,ah
-    out 0x40,al
+    ; PIT default @100Hz
+    mov eax, 100
+    call pit_set_hz
+    call mouse_init
 
     lidt [idt_ptr]
     mov dword [interrupts_ready],1
     popa
+    ret
+
+pit_set_hz:
+    ; IN: EAX = requested hz (10..1000). OUT: EAX=1 ok / 0 invalid
+    cmp eax, 10
+    jb .bad
+    cmp eax, 1000
+    ja .bad
+    mov [pit_hz], eax
+    push ebx
+    push edx
+    mov ebx, eax
+    mov eax, 1193182
+    xor edx, edx
+    div ebx
+    mov bx, ax
+    mov al, 0x36
+    out 0x43, al
+    mov al, bl
+    out 0x40, al
+    mov al, bh
+    out 0x40, al
+    pop edx
+    pop ebx
+    mov eax, 1
+    ret
+.bad:
+    xor eax, eax
     ret
 
 interrupts_enable:
@@ -217,11 +243,31 @@ isr_irq0:
 
 isr_irq1:
     pusha
+    ; Captura scancode por IRQ y encola para lectura estable en shell.
     in al,0x60
+    call kbd_irq_push_scancode
     inc dword [irq1_keys]
     mov eax, 0x10000021
     call interrupt_log_push
     mov al,0x20
+    out 0x20,al
+    popa
+    iretd
+
+isr_irq12:
+    pusha
+    in al,0x64
+    test al, 1
+    jz .eoi
+    test al, 0x20
+    jz .eoi
+    in al,0x60
+    call mouse_irq_handle_byte
+    mov eax, 0x1000002C
+    call interrupt_log_push
+.eoi:
+    mov al,0x20
+    out 0xA0,al
     out 0x20,al
     popa
     iretd
