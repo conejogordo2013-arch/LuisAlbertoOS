@@ -298,6 +298,7 @@ msg_install_real_ok db 0x0A,"[SETUP] Boot y kernel instalados en disco destino."
 msg_install_real_err db 0x0A,"[SETUP] Error escribiendo sector en disco destino.",0
 msg_root_on       db 0x0A,"Precaucion con los archivos del sistema. Root Activado",0
 msg_install_only  db 0x0A,"[LOCK] Sistema en modo instalacion: solo comando install habilitado.",0
+msg_install_disabled db 0x0A,"[OK] Sistema ya instalado: comando install deshabilitado.",0
 inst_sys_name     db "sys",0
 inst_drv_name     db "drivers",0
 inst_app_name     db "apps",0
@@ -716,7 +717,7 @@ execute:
     mov edi, cmd_install
     call strcmp
     cmp eax, 0
-    je do_install
+    je do_install_guard
     mov esi, msg_install_only
     call api_print_string
     jmp shell_loop
@@ -895,7 +896,7 @@ execute:
     mov edi, cmd_install
     call strcmp
     cmp eax, 0
-    je do_install
+    je do_install_guard
     mov edi, cmd_root
     call strcmp
     cmp eax, 0
@@ -3367,6 +3368,13 @@ do_mouse:
 
 do_root:
     mov esi, msg_root_on
+    call api_print_string
+    jmp shell_loop
+
+do_install_guard:
+    cmp dword [install_only_mode], 1
+    je do_install
+    mov esi, msg_install_disabled
     call api_print_string
     jmp shell_loop
 
