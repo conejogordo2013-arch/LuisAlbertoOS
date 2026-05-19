@@ -30,9 +30,6 @@ vga_desktop_view:
     mov edx, [desk_prev_right]
     mov [desk_prev_right], ecx
 
-    mov ecx, [mouse_x]
-    mov edx, [mouse_y]
-
     ; Click derecho (flanco): restaurar layout por defecto rápido.
     cmp ecx, 1
     jne .left_click_logic
@@ -41,6 +38,11 @@ vga_desktop_view:
     mov dword [desk_cmd_min], 0
     mov dword [desk_win_x], 24
     mov dword [desk_win_y], 18
+    mov dword [desk_win_w], 272
+    mov dword [desk_win_h], 130
+
+    mov ecx, [mouse_x]
+    mov edx, [mouse_y]
 
 .left_click_logic:
     cmp eax, 1
