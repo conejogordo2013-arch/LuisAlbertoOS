@@ -20,6 +20,8 @@ vga_desktop_view:
     mov esi, vga_regs_13h
     call vga_write_regs
 .frame:
+    call vga_wait_vsync
+
     mov eax, [mouse_buttons]
     and eax, 1
     mov ebx, [desk_prev_left]
@@ -29,6 +31,8 @@ vga_desktop_view:
     and ecx, 1
     mov edx, [desk_prev_right]
     mov [desk_prev_right], ecx
+    mov ecx, [mouse_x]
+    mov edx, [mouse_y]
 
     ; Click derecho (flanco): restaurar layout por defecto rápido.
     cmp ecx, 1
@@ -40,9 +44,6 @@ vga_desktop_view:
     mov dword [desk_win_y], 18
     mov dword [desk_win_w], 272
     mov dword [desk_win_h], 130
-
-    mov ecx, [mouse_x]
-    mov edx, [mouse_y]
 
 .left_click_logic:
     cmp eax, 1
@@ -268,6 +269,19 @@ vga_image_view:
     mov esi, vga_regs_3h
     call vga_write_regs
 
+    ret
+
+vga_wait_vsync:
+    ; Espera a VBlank para reducir parpadeo/tearing en modo 13h.
+.wait_not_retrace:
+    mov dx, 0x3DA
+    in al, dx
+    test al, 0x08
+    jnz .wait_not_retrace
+.wait_retrace:
+    in al, dx
+    test al, 0x08
+    jz .wait_retrace
     ret
 
 ; ==================================================================
