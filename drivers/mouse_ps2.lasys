@@ -1,0 +1,152 @@
+; ==================================================================
+; mouse_ps2.lasys - PS/2 mouse básico con IRQ12 y paquetes de 3 bytes
+; ==================================================================
+%ifndef MOUSE_PS2_LASYS
+%define MOUSE_PS2_LASYS
+
+mouse_ready      dd 0
+mouse_x          dd 0
+mouse_y          dd 0
+mouse_buttons    dd 0
+mouse_packets    dd 0
+mouse_byte_index dd 0
+mouse_pkt0       db 0
+mouse_pkt1       db 0
+mouse_pkt2       db 0
+mouse_last_ack   db 0
+
+mouse_wait_input_clear:
+    push ecx
+    mov ecx, 100000
+.w0:
+    in al, 0x64
+    test al, 2
+    jz .ok
+    loop .w0
+.ok:
+    pop ecx
+    ret
+
+mouse_wait_output_full:
+    push ecx
+    mov ecx, 100000
+.w1:
+    in al, 0x64
+    test al, 1
+    jnz .ok
+    loop .w1
+.ok:
+    pop ecx
+    ret
+
+mouse_read_data_timeout:
+    ; OUT: AL=data, EAX=1 ok / 0 timeout
+    push ecx
+    mov ecx, 100000
+.w:
+    in al, 0x64
+    test al, 1
+    jz .next
+    in al, 0x60
+    mov [mouse_last_ack], al
+    mov eax, 1
+    pop ecx
+    ret
+.next:
+    loop .w
+    xor eax, eax
+    pop ecx
+    ret
+
+mouse_write_dev:
+    ; AL = byte to device
+    push eax
+    call mouse_wait_input_clear
+    mov al, 0xD4
+    out 0x64, al
+    call mouse_wait_input_clear
+    pop eax
+    out 0x60, al
+    ret
+
+mouse_init:
+    ; Enable auxiliary mouse device and IRQ12
+    call mouse_wait_input_clear
+    mov al, 0xA8
+    out 0x64, al
+
+    ; Read/modify/write controller command byte: enable IRQ12 bit (bit1)
+    call mouse_wait_input_clear
+    mov al, 0x20
+    out 0x64, al
+    call mouse_wait_output_full
+    in al, 0x60
+    or al, 0x02
+    and al, 0xDF           ; disable translation bit for consistency
+    mov bl, al
+    call mouse_wait_input_clear
+    mov al, 0x60
+    out 0x64, al
+    call mouse_wait_input_clear
+    mov al, bl
+    out 0x60, al
+
+    ; Set defaults + enable streaming
+    mov al, 0xF6
+    call mouse_write_dev
+    call mouse_read_data_timeout
+    cmp eax, 1
+    jne .fail
+    cmp al, 0xFA
+    jne .fail
+    mov al, 0xF4
+    call mouse_write_dev
+    call mouse_read_data_timeout
+    cmp eax, 1
+    jne .fail
+    cmp al, 0xFA
+    jne .fail
+    mov dword [mouse_ready], 1
+    mov dword [mouse_byte_index], 0
+    ret
+.fail:
+    mov dword [mouse_ready], 0
+    ret
+
+mouse_irq_handle_byte:
+    ; AL = incoming byte from 0x60
+    push eax
+    push ebx
+    mov ebx, [mouse_byte_index]
+    cmp ebx, 0
+    jne .b1
+    test al, 0x08
+    jz .done
+    mov [mouse_pkt0], al
+    mov dword [mouse_byte_index], 1
+    jmp .done
+.b1:
+    cmp ebx, 1
+    jne .b2
+    mov [mouse_pkt1], al
+    mov dword [mouse_byte_index], 2
+    jmp .done
+.b2:
+    mov [mouse_pkt2], al
+    mov dword [mouse_byte_index], 0
+    inc dword [mouse_packets]
+
+    movzx eax, byte [mouse_pkt0]
+    and eax, 0x07
+    mov [mouse_buttons], eax
+
+    movsx eax, byte [mouse_pkt1]
+    add [mouse_x], eax
+    movsx eax, byte [mouse_pkt2]
+    sub [mouse_y], eax
+.done:
+    pop ebx
+    pop eax
+    ret
+
+%endif

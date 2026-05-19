@@ -2,12 +2,16 @@
 %define KEYBOARD_LASYS
 
 global kbd_read_char
+global kbd_irq_push_scancode
 
 ; -----------------------------
 ; Estado
 ; -----------------------------
 ctrl_state db 0
 shift_state db 0
+kbd_irq_head dd 0
+kbd_irq_tail dd 0
+kbd_irq_ring times 64 db 0
 
 ; -----------------------------
 ; Leer carácter (bloqueante)
@@ -15,14 +19,19 @@ shift_state db 0
 ;   AL = ASCII (0 si ignorar)
 ; -----------------------------
 kbd_read_char:
-
 .wait:
+    call kbd_irq_pop_scancode
+    cmp eax, 1
+    je .got_scancode
     in al, 0x64
     test al, 1
     jz .wait
-
     in al, 0x60
     mov bl, al
+    jmp .decode
+.got_scancode:
+    mov bl, al
+.decode:
 
     ; -------------------------
     ; Detectar release (bit 7)
@@ -158,6 +167,36 @@ kbd_read_char:
 
 .ignore:
     mov al, 0
+    ret
+
+kbd_irq_push_scancode:
+    ; IN: AL=scancode
+    pusha
+    mov ebx, [kbd_irq_head]
+    and ebx, 63
+    mov [kbd_irq_ring + ebx], al
+    inc dword [kbd_irq_head]
+    mov eax, [kbd_irq_head]
+    sub eax, [kbd_irq_tail]
+    cmp eax, 64
+    jbe .done
+    inc dword [kbd_irq_tail]
+.done:
+    popa
+    ret
+
+kbd_irq_pop_scancode:
+    ; OUT: EAX=1 and AL=scancode if available; EAX=0 if empty
+    mov eax, [kbd_irq_tail]
+    cmp eax, [kbd_irq_head]
+    je .empty
+    and eax, 63
+    mov al, [kbd_irq_ring + eax]
+    inc dword [kbd_irq_tail]
+    mov eax, 1
+    ret
+.empty:
+    xor eax, eax
     ret
 
 ; -----------------------------
