@@ -109,6 +109,8 @@ cmd_fssync    db "fssync",0
 cmd_fsreload  db "fsreload",0
 cmd_timer     db "timer",0
 cmd_mouse     db "mouse",0
+cmd_install   db "install",0
+cmd_root      db "@rtlaos",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -148,6 +150,8 @@ msg_dir_type      db " <DIR>",0
 msg_audio     db 0x0A,"Audio: usa beep para probar salida sonora.",0
 msg_err_img       db 0x0A,"Error: Archivo de imagen no encontrado o vacio.",0
 msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
+                "[DESKTOP EXPERIMENTAL] Puede tener bugs/parpadeo.",0x0A, \
+                "Se encuentra en desarrollo activo.",0x0A, \
                 "dir    - Lista directorio",0x0A, \
                 "clear  - Limpia pantalla",0x0A, \
                 "cd     - Cambia directorio",0x0A, \
@@ -183,6 +187,8 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "fsreload- Recarga directorio desde disco",0x0A, \
                 "timer  - Ajuste PIT/scheduler",0x0A, \
                 "mouse  - Estado mouse PS/2",0x0A, \
+                "install- Setup basico a disco",0x0A, \
+                "@rtlaos- Root basico (precaucion)",0x0A, \
                 "block  - Bloquear task",0x0A, \
                 "wake   - Despertar task0",0x0A, \
                 "journal- Estado journal FS",0x0A, \
@@ -278,6 +284,31 @@ msg_mouse_x       db 0x0A,"X: ",0
 msg_mouse_y       db 0x0A,"Y: ",0
 msg_mouse_btn     db 0x0A,"Buttons: ",0
 msg_mouse_ack     db 0x0A,"Last ACK: ",0
+msg_install_hdr   db 0x0A,"[SETUP] LuisAlbertoOS installer basico",0
+msg_install_scan  db 0x0A,"Buscando discos disponibles...",0
+msg_install_disk  db 0x0A,"Disco detectado: 0x80",0
+msg_install_dirs  db 0x0A,"Creando /sys /drivers /apps /krnl ...",0
+msg_install_copy  db 0x0A,"Copiando kernel/drivers/apps [",0
+msg_install_done  db "] 100%",0x0A,"Instalacion finalizada. Reiniciando...",0
+msg_install_fail  db 0x0A,"[SETUP] Error: no se pudo montar almacenamiento ATA.",0
+msg_install_warn  db 0x0A,"[SETUP] Continuando en RAM FS (modo demo).",0
+msg_install_ok    db 0x0A,"[SETUP] Archivos base instalados: /sys /drivers /apps /krnl",0
+msg_install_real  db 0x0A,"[SETUP] Instalando boot+kernel real en disco (LBA 0..96)...",0
+msg_install_real_ok db 0x0A,"[SETUP] Boot y kernel instalados en disco destino.",0
+msg_install_real_err db 0x0A,"[SETUP] Error escribiendo sector en disco destino.",0
+msg_root_on       db 0x0A,"Precaucion con los archivos del sistema. Root Activado",0
+msg_install_only  db 0x0A,"[LOCK] Sistema en modo instalacion: solo comando install habilitado.",0
+msg_install_disabled db 0x0A,"[OK] Sistema ya instalado: comando install deshabilitado.",0
+inst_sys_name     db "sys",0
+inst_drv_name     db "drivers",0
+inst_app_name     db "apps",0
+inst_krn_name     db "krnl",0
+inst_kcfg_name    db "krnl.cfg",0
+inst_dcfg_name    db "drivers.lst",0
+inst_acfg_name    db "apps.lst",0
+inst_root_note    db "@rtlaos: Root Activado - Precaucion con archivos del sistema",0
+inst_tmp_name_ptr dd 0
+inst_tmp_text_ptr dd 0
 arg_timer_status  db "status",0
 arg_timer_fast    db "fast",0
 arg_timer_slow    db "slow",0
@@ -520,6 +551,7 @@ active_audio_driver dd 0 ; 1=ac97,2=sb16
 e1000_link_up     dd 0
 e1000_tx_packets  dd 0
 e1000_tx_errors   dd 0
+install_only_mode dd 1
 
 ; ==================================================================
 ; INICIO DEL SHELL
@@ -535,6 +567,19 @@ shell_start:
     je skip_init
     call fs_init
 skip_init:
+    ; desbloquear shell solo si existe instalacion persistente en ATA
+    call fs_init_ata
+    cmp eax, 1
+    jne .lock_default
+    mov esi, inst_kcfg_name
+    call fs_read_file
+    cmp eax, 0
+    je .lock_default
+    mov dword [install_only_mode], 0
+    jmp .welcome
+.lock_default:
+    mov dword [install_only_mode], 1
+.welcome:
     mov esi, msg_welcome
     call api_print_string
 
@@ -666,6 +711,17 @@ execute:
     mov esi, cmd_buffer
     cmp byte [esi], 0
     je shell_loop
+
+    cmp dword [install_only_mode], 1
+    jne .normal_dispatch
+    mov edi, cmd_install
+    call strcmp
+    cmp eax, 0
+    je do_install_guard
+    mov esi, msg_install_only
+    call api_print_string
+    jmp shell_loop
+.normal_dispatch:
 
     ; --- RUTINAS DE COMANDOS BÁSICOS ---
     mov edi, cmd_dir
@@ -837,6 +893,14 @@ execute:
     call strcmp
     cmp eax, 0
     je do_mouse
+    mov edi, cmd_install
+    call strcmp
+    cmp eax, 0
+    je do_install_guard
+    mov edi, cmd_root
+    call strcmp
+    cmp eax, 0
+    je do_root
     mov edi, cmd_block
     call strcmp
     cmp eax, 0
@@ -3301,6 +3365,141 @@ do_mouse:
     movzx eax, byte [mouse_last_ack]
     call print_hex32
     jmp shell_loop
+
+do_root:
+    mov esi, msg_root_on
+    call api_print_string
+    jmp shell_loop
+
+do_install_guard:
+    cmp dword [install_only_mode], 1
+    je do_install
+    mov esi, msg_install_disabled
+    call api_print_string
+    jmp shell_loop
+
+do_install:
+    mov esi, msg_install_hdr
+    call api_print_string
+    mov esi, msg_install_scan
+    call api_print_string
+    mov esi, msg_install_disk
+    call api_print_string
+    mov esi, msg_install_dirs
+    call api_print_string
+    mov esi, msg_install_real
+    call api_print_string
+    call install_write_boot_kernel
+    cmp eax, 1
+    je .real_ok
+    mov esi, msg_install_real_err
+    call api_print_string
+    jmp shell_loop
+.real_ok:
+    mov esi, msg_install_real_ok
+    call api_print_string
+
+    ; Intentar backend ATA real; si falla, continuar en RAM FS.
+    call fs_init_ata
+    cmp eax, 1
+    je .mk_tree
+    mov esi, msg_install_fail
+    call api_print_string
+    mov esi, msg_install_warn
+    call api_print_string
+.mk_tree:
+    mov al, 2
+    mov esi, inst_sys_name
+    call fs_create_file
+    mov al, 2
+    mov esi, inst_drv_name
+    call fs_create_file
+    mov al, 2
+    mov esi, inst_app_name
+    call fs_create_file
+    mov al, 2
+    mov esi, inst_krn_name
+    call fs_create_file
+
+    mov esi, inst_kcfg_name
+    mov edi, inst_root_note
+    call fs_write_text_file
+    mov esi, inst_dcfg_name
+    mov edi, msg_data_devices
+    call fs_write_text_file
+    mov esi, inst_acfg_name
+    mov edi, msg_help
+    call fs_write_text_file
+
+    call fs_sync
+    mov esi, msg_install_ok
+    call api_print_string
+    mov esi, msg_install_copy
+    call api_print_string
+    mov eax, 25
+    call print_dec32
+    mov esi, msg_install_copy
+    call api_print_string
+    mov eax, 50
+    call print_dec32
+    mov esi, msg_install_copy
+    call api_print_string
+    mov eax, 75
+    call print_dec32
+    mov esi, msg_install_done
+    call api_print_string
+    mov al, 0xFE
+    out 0x64, al
+    jmp shell_loop
+
+install_write_boot_kernel:
+    ; Copia boot sector y ventana de kernel cargada en RAM al disco destino ATA.
+    ; Boot sector RAM en 0000:7C00; kernel en 0x10000 (96 sectores).
+    mov eax, 0
+    mov ebx, 0x7C00
+    call floppy_write_sector
+    cmp eax, 1
+    jne .fail
+    xor edx, edx
+.kloop:
+    mov eax, edx
+    add eax, 1
+    mov ebx, 0x10000
+    mov ecx, edx
+    shl ecx, 9
+    add ebx, ecx
+    call floppy_write_sector
+    cmp eax, 1
+    jne .fail
+    inc edx
+    cmp edx, 96
+    jb .kloop
+    mov eax, 1
+    ret
+.fail:
+    xor eax, eax
+    ret
+
+fs_write_text_file:
+    ; IN: ESI=nombre, EDI=texto NUL-terminated
+    mov [inst_tmp_name_ptr], esi
+    mov [inst_tmp_text_ptr], edi
+    mov al, 1
+    call fs_create_file
+    mov esi, [inst_tmp_text_ptr]
+    xor ecx, ecx
+.len:
+    cmp byte [esi+ecx], 0
+    je .go
+    inc ecx
+    cmp ecx, FS_MAX_FILE_SIZE-1
+    jb .len
+.go:
+    mov eax, ecx
+    mov esi, [inst_tmp_name_ptr]
+    mov ebx, [inst_tmp_text_ptr]
+    call fs_write_file
+    ret
 
 history_push_if_nonempty:
     pusha
