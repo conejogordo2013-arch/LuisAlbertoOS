@@ -293,7 +293,11 @@ msg_install_done  db "] 100%",0x0A,"Instalacion finalizada. Reiniciando...",0
 msg_install_fail  db 0x0A,"[SETUP] Error: no se pudo montar almacenamiento ATA.",0
 msg_install_warn  db 0x0A,"[SETUP] Continuando en RAM FS (modo demo).",0
 msg_install_ok    db 0x0A,"[SETUP] Archivos base instalados: /sys /drivers /apps /krnl",0
+msg_install_real  db 0x0A,"[SETUP] Instalando boot+kernel real en disco (LBA 0..96)...",0
+msg_install_real_ok db 0x0A,"[SETUP] Boot y kernel instalados en disco destino.",0
+msg_install_real_err db 0x0A,"[SETUP] Error escribiendo sector en disco destino.",0
 msg_root_on       db 0x0A,"Precaucion con los archivos del sistema. Root Activado",0
+msg_install_only  db 0x0A,"[LOCK] Sistema en modo instalacion: solo comando install habilitado.",0
 inst_sys_name     db "sys",0
 inst_drv_name     db "drivers",0
 inst_app_name     db "apps",0
@@ -546,6 +550,7 @@ active_audio_driver dd 0 ; 1=ac97,2=sb16
 e1000_link_up     dd 0
 e1000_tx_packets  dd 0
 e1000_tx_errors   dd 0
+install_only_mode dd 1
 
 ; ==================================================================
 ; INICIO DEL SHELL
@@ -561,6 +566,19 @@ shell_start:
     je skip_init
     call fs_init
 skip_init:
+    ; desbloquear shell solo si existe instalacion persistente en ATA
+    call fs_init_ata
+    cmp eax, 1
+    jne .lock_default
+    mov esi, inst_kcfg_name
+    call fs_read_file
+    cmp eax, 0
+    je .lock_default
+    mov dword [install_only_mode], 0
+    jmp .welcome
+.lock_default:
+    mov dword [install_only_mode], 1
+.welcome:
     mov esi, msg_welcome
     call api_print_string
 
@@ -692,6 +710,17 @@ execute:
     mov esi, cmd_buffer
     cmp byte [esi], 0
     je shell_loop
+
+    cmp dword [install_only_mode], 1
+    jne .normal_dispatch
+    mov edi, cmd_install
+    call strcmp
+    cmp eax, 0
+    je do_install
+    mov esi, msg_install_only
+    call api_print_string
+    jmp shell_loop
+.normal_dispatch:
 
     ; --- RUTINAS DE COMANDOS BÁSICOS ---
     mov edi, cmd_dir
@@ -3350,6 +3379,18 @@ do_install:
     call api_print_string
     mov esi, msg_install_dirs
     call api_print_string
+    mov esi, msg_install_real
+    call api_print_string
+    call install_write_boot_kernel
+    cmp eax, 1
+    je .real_ok
+    mov esi, msg_install_real_err
+    call api_print_string
+    jmp shell_loop
+.real_ok:
+    mov esi, msg_install_real_ok
+    call api_print_string
+
     ; Intentar backend ATA real; si falla, continuar en RAM FS.
     call fs_init_ata
     cmp eax, 1
@@ -3403,6 +3444,34 @@ do_install:
     out 0x64, al
     jmp shell_loop
 
+install_write_boot_kernel:
+    ; Copia boot sector y ventana de kernel cargada en RAM al disco destino ATA.
+    ; Boot sector RAM en 0000:7C00; kernel en 0x10000 (96 sectores).
+    mov eax, 0
+    mov ebx, 0x7C00
+    call floppy_write_sector
+    cmp eax, 1
+    jne .fail
+    xor edx, edx
+.kloop:
+    mov eax, edx
+    add eax, 1
+    mov ebx, 0x10000
+    mov ecx, edx
+    shl ecx, 9
+    add ebx, ecx
+    call floppy_write_sector
+    cmp eax, 1
+    jne .fail
+    inc edx
+    cmp edx, 96
+    jb .kloop
+    mov eax, 1
+    ret
+.fail:
+    xor eax, eax
+    ret
+
 fs_write_text_file:
     ; IN: ESI=nombre, EDI=texto NUL-terminated
     mov [inst_tmp_name_ptr], esi
@@ -3420,7 +3489,7 @@ fs_write_text_file:
 .go:
     mov eax, ecx
     mov esi, [inst_tmp_name_ptr]
-    mov edi, [inst_tmp_text_ptr]
+    mov ebx, [inst_tmp_text_ptr]
     call fs_write_file
     ret
 
