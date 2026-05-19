@@ -10,16 +10,16 @@ mkdir -p boot kernel apps drivers libs bin
 
 # Disk layout (LBA sectors, 512 bytes each):
 #   0       boot sector
-#   1..80   kernel image loaded by boot/LABootL.asm at 1000:0000 (80 sectors)
-#   104..   apps and optional demo data, safely outside the kernel window
-KERNEL_LOAD_SECTORS=80
+#   1..96   kernel image loaded by boot/LABootL.asm at 1000:0000 (96 sectors)
+#   128..   apps and optional demo data, safely outside the kernel window
+KERNEL_LOAD_SECTORS=96
 KERNEL_START_LBA=1
-APP_SAMPLE_LBA=104
-APP_TEXTEDIT_LBA=106
-APP_TASKMGR_LBA=108
-APP_LATEXTEDIT_LBA=110
-FS_DIR_LBA=144
-FS_DATA_LBA=145
+APP_SAMPLE_LBA=128
+APP_TEXTEDIT_LBA=130
+APP_TASKMGR_LBA=132
+APP_LATEXTEDIT_LBA=134
+FS_DIR_LBA=168
+FS_DATA_LBA=169
 
 # 1. Bootloader and kernel
 nasm -f bin boot/LABootL.asm -o bin/boot.bin
