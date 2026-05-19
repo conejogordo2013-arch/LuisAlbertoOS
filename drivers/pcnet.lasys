@@ -1,0 +1,15 @@
+; AMD PCnet driver stub (experimental)
+pcnet_present dd 0
+pcnet_init:
+    cmp dword [pci_pcnet_bar0], 0
+    jne .found
+    cmp dword [pci_pcnet_bar1], 0
+    je .no
+.found:
+    mov dword [pcnet_present], 1
+    mov eax, 1
+    ret
+.no:
+    mov dword [pcnet_present], 0
+    xor eax, eax
+    ret

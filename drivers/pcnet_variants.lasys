@@ -1,0 +1,16 @@
+; AMD PCnet family stubs (experimental)
+
+pcnet_am79c970_present dd 0
+pcnet_am79c971_present dd 0
+pcnet_am79c972_present dd 0
+pcnet_am79c973_present dd 0
+pcnet_am79c975_present dd 0
+
+pcnet_family_init_all:
+    mov dword [pcnet_am79c970_present], 1
+    mov dword [pcnet_am79c971_present], 1
+    mov dword [pcnet_am79c972_present], 1
+    mov dword [pcnet_am79c973_present], 1
+    mov dword [pcnet_am79c975_present], 1
+    mov eax, 1
+    ret

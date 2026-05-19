@@ -109,6 +109,7 @@ cmd_fssync    db "fssync",0
 cmd_fsreload  db "fsreload",0
 cmd_timer     db "timer",0
 cmd_mouse     db "mouse",0
+cmd_root      db "root",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -148,6 +149,7 @@ msg_dir_type      db " <DIR>",0
 msg_audio     db 0x0A,"Audio: usa beep para probar salida sonora.",0
 msg_err_img       db 0x0A,"Error: Archivo de imagen no encontrado o vacio.",0
 msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
+                "NOTA: shell/desktop en desarrollo (experimental, puede tener bugs)",0x0A, \
                 "dir    - Lista directorio",0x0A, \
                 "clear  - Limpia pantalla",0x0A, \
                 "cd     - Cambia directorio",0x0A, \
@@ -183,6 +185,7 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "fsreload- Recarga directorio desde disco",0x0A, \
                 "timer  - Ajuste PIT/scheduler",0x0A, \
                 "mouse  - Estado mouse PS/2",0x0A, \
+                "root @rtlaos - Activa root basico",0x0A, \
                 "block  - Bloquear task",0x0A, \
                 "wake   - Despertar task0",0x0A, \
                 "journal- Estado journal FS",0x0A, \
@@ -314,6 +317,12 @@ msg_dev_audio     db 0x0A,"AC97: ",0
 msg_dev_ata_disk  db 0x0A,"ATA Disk: ",0
 msg_dev_sb16      db 0x0A,"SB16: ",0
 msg_dev_e1000     db 0x0A,"E1000: ",0
+msg_dev_rtl8169   db 0x0A,"RTL8169: ",0
+msg_dev_pcnet     db 0x0A,"PCnet: ",0
+msg_dev_hda       db 0x0A,"IntelHDA: ",0
+msg_dev_nvme      db 0x0A,"NVMe: ",0
+msg_dev_ahci      db 0x0A,"AHCI: ",0
+msg_dev_usb       db 0x0A,"USB HC: ",0
 msg_dev_floppy    db 0x0A,"Floppy: ",0
 msg_dev_cdrom     db 0x0A,"CDROM: ",0
 msg_dev_sata      db 0x0A,"SATA: ",0
@@ -366,10 +375,13 @@ msg_vmunmap_ok    db 0x0A,"vm unmap ok",0
 msg_vmunmap_fail  db 0x0A,"vm unmap fail",0
 msg_change_usage  db 0x0A,"Uso: change <status|all|a|c|d|floppy|cdrom|ram|ata|sata>",0
 msg_change_usage2 db 0x0A,"Uso extendido: change disk <a|c|d|floppy|cdrom|ram|ata|sata> | change disp <rtl8139|e1000|all> | change sd <ac97|sb16|all>",0
-msg_activate_usage db 0x0A,"Uso: activate <disp|disk|sd> <rtl8139|e1000|ac97|sb16|ata|floppy|cdrom|sata|ram|all>",0
+msg_activate_usage db 0x0A,"Uso: activate <disp|disk|sd> <rtl8139|e1000|rtl8169|pcnet|ac97|intelhda|sb16|ata|floppy|cdrom|sata|ram|nvme|ahci|usb1|usb2|usb3|ich6|piix3|piix4|all>",0
 msg_activate_ok db 0x0A,"Activado: ",0
 msg_activate_all_ok db 0x0A,"Sondeo/activacion de dispositivos completado.",0
 msg_activate_fail db 0x0A,"No detectado o no se pudo activar: ",0
+msg_root_ok       db 0x0A,"Root basico activo.",0
+msg_root_bad      db 0x0A,"Clave root invalida. Uso: root @rtlaos",0
+msg_root_needed   db 0x0A,"Operacion protegida: requiere root.",0
 msg_data_hdr db 0x0A,"-- DATA / Kernel diagnostics --",0x0A,0
 msg_data_boot db "Bootloader: ",0
 msg_data_total db 0x0A,"Total Memory: ",0
@@ -480,13 +492,25 @@ arg_all           db "all",0
 arg_status        db "status",0
 arg_net           db "net",0
 arg_rtl8139       db "rtl8139",0
+arg_rtl8169       db "rtl8169",0
 arg_e1000         db "e1000",0
+arg_pcnet         db "pcnet",0
 arg_sd            db "sd",0
+arg_root_key      db "@rtlaos",0
 arg_ac97          db "ac97",0
+arg_intelhda      db "intelhda",0
 arg_sb16          db "sb16",0
 arg_floppy        db "floppy",0
 arg_cdrom         db "cdrom",0
 arg_sata          db "sata",0
+arg_nvme          db "nvme",0
+arg_ahci          db "ahci",0
+arg_usb1          db "usb1",0
+arg_usb2          db "usb2",0
+arg_usb3          db "usb3",0
+arg_ich6          db "ich6",0
+arg_piix3         db "piix3",0
+arg_piix4         db "piix4",0
 arg_a             db "a",0
 arg_c             db "c",0
 arg_d             db "d",0
@@ -507,6 +531,7 @@ msg_net_ascii     db 0x0A,"ASCII:",0x0A,0
 
 ; Buffers y Variables de Red
 hex_arg_ptr       dd 0
+root_enabled      dd 0
 net_pkts_sent     dd 0
 net_pkts_recv     dd 0
 net_errors        dd 0
@@ -837,6 +862,10 @@ execute:
     call strcmp
     cmp eax, 0
     je do_mouse
+    mov edi, cmd_root
+    call strcmp
+    cmp eax, 0
+    je do_root
     mov edi, cmd_block
     call strcmp
     cmp eax, 0
@@ -1045,6 +1074,13 @@ do_dir:
     movzx eax, al
     cmp eax, [fs_cwd_id]
     jne .next_entry
+    cmp dword [root_enabled], 1
+    je .print_visible
+    cmp byte [esi+24], 0x81
+    je .next_entry
+    cmp byte [esi+24], 0x82
+    je .next_entry
+.print_visible:
     push esi
     push ecx
     call print_entry_name
@@ -1076,9 +1112,20 @@ do_mkdir:
     mov esi, [arg_ptr]
     cmp esi, 0
     je shell_loop
-    mov al, 2            
+    mov al, 2
+    call find_opt_r
+    cmp eax, 1
+    jne .mk_create
+    cmp dword [root_enabled], 1
+    jne .mk_need_root
+    mov al, 0x82
+.mk_create:
     call fs_create_file  
     mov esi, msg_created_dir
+    call api_print_string
+    jmp shell_loop
+.mk_need_root:
+    mov esi, msg_root_needed
     call api_print_string
     jmp shell_loop
 
@@ -1088,9 +1135,20 @@ do_touch:
     mov esi, [arg_ptr]
     cmp esi, 0
     je shell_loop
-    mov al, 1            
+    mov al, 1
+    call find_opt_r
+    cmp eax, 1
+    jne .touch_create
+    cmp dword [root_enabled], 1
+    jne .touch_need_root
+    mov al, 0x81
+.touch_create:
     call fs_create_file
     mov esi, msg_created_file
+    call api_print_string
+    jmp shell_loop
+.touch_need_root:
+    mov esi, msg_root_needed
     call api_print_string
     jmp shell_loop
 
@@ -1522,6 +1580,70 @@ do_devices:
     mov esi, msg_dev_missing
 .e1000_out:
     call api_print_string
+    mov esi, msg_dev_rtl8169
+    call api_print_string
+    cmp dword [rtl8169_present], 0
+    je .rtl8169_no
+    mov esi, msg_dev_ok
+    jmp .rtl8169_out
+.rtl8169_no:
+    mov esi, msg_dev_missing
+.rtl8169_out:
+    call api_print_string
+    mov esi, msg_dev_pcnet
+    call api_print_string
+    cmp dword [pcnet_present], 0
+    je .pcnet_no
+    mov esi, msg_dev_ok
+    jmp .pcnet_out
+.pcnet_no:
+    mov esi, msg_dev_missing
+.pcnet_out:
+    call api_print_string
+    mov esi, msg_dev_hda
+    call api_print_string
+    cmp dword [intelhda_present], 0
+    je .hda_no
+    mov esi, msg_dev_ok
+    jmp .hda_out
+.hda_no:
+    mov esi, msg_dev_missing
+.hda_out:
+    call api_print_string
+    mov esi, msg_dev_nvme
+    call api_print_string
+    cmp dword [nvme_pcie_present], 0
+    je .nvme_no
+    mov esi, msg_dev_ok
+    jmp .nvme_out
+.nvme_no:
+    mov esi, msg_dev_missing
+.nvme_out:
+    call api_print_string
+    mov esi, msg_dev_ahci
+    call api_print_string
+    cmp dword [ahci_sata_present], 0
+    je .ahci_no
+    mov esi, msg_dev_ok
+    jmp .ahci_out
+.ahci_no:
+    mov esi, msg_dev_missing
+.ahci_out:
+    call api_print_string
+    mov esi, msg_dev_usb
+    call api_print_string
+    cmp dword [usb_1_0_uhci_present], 0
+    jne .usb_ok
+    cmp dword [usb_2_0_ehci_present], 0
+    jne .usb_ok
+    cmp dword [usb_3_0_xhci_present], 0
+    jne .usb_ok
+    mov esi, msg_dev_missing
+    jmp .usb_out
+.usb_ok:
+    mov esi, msg_dev_ok
+.usb_out:
+    call api_print_string
     jmp shell_loop
 
 do_beep:
@@ -1655,12 +1777,27 @@ do_activate:
     call strcmp
     cmp eax, 0
     je do_activate_e1000
+    mov esi, [activate_arg2]
+    mov edi, arg_rtl8169
+    call strcmp
+    cmp eax, 0
+    je do_activate_rtl8169
+    mov esi, [activate_arg2]
+    mov edi, arg_pcnet
+    call strcmp
+    cmp eax, 0
+    je do_activate_pcnet
 
     mov esi, [activate_arg2]
     mov edi, arg_ac97
     call strcmp
     cmp eax, 0
     je do_activate_ac97
+    mov esi, [activate_arg2]
+    mov edi, arg_intelhda
+    call strcmp
+    cmp eax, 0
+    je do_activate_intelhda
 
     mov esi, [activate_arg2]
     mov edi, arg_sb16
@@ -1697,6 +1834,46 @@ do_activate:
     call strcmp
     cmp eax, 0
     je do_activate_ram
+    mov esi, [activate_arg2]
+    mov edi, arg_nvme
+    call strcmp
+    cmp eax, 0
+    je do_activate_nvme
+    mov esi, [activate_arg2]
+    mov edi, arg_ahci
+    call strcmp
+    cmp eax, 0
+    je do_activate_ahci
+    mov esi, [activate_arg2]
+    mov edi, arg_usb1
+    call strcmp
+    cmp eax, 0
+    je do_activate_usb1
+    mov esi, [activate_arg2]
+    mov edi, arg_usb2
+    call strcmp
+    cmp eax, 0
+    je do_activate_usb2
+    mov esi, [activate_arg2]
+    mov edi, arg_usb3
+    call strcmp
+    cmp eax, 0
+    je do_activate_usb3
+    mov esi, [activate_arg2]
+    mov edi, arg_ich6
+    call strcmp
+    cmp eax, 0
+    je do_activate_ich6
+    mov esi, [activate_arg2]
+    mov edi, arg_piix3
+    call strcmp
+    cmp eax, 0
+    je do_activate_piix3
+    mov esi, [activate_arg2]
+    mov edi, arg_piix4
+    call strcmp
+    cmp eax, 0
+    je do_activate_piix4
 
 .usage:
     mov esi, msg_activate_usage
@@ -1720,6 +1897,18 @@ do_activate_rtl8139:
     mov esi, arg_rtl8139
     jmp activate_print_fail
 
+do_activate_rtl8169:
+    call rtl8169_init
+    cmp eax, 1
+    jne .fail
+    mov dword [net_driver_available], 1
+    mov esi, arg_rtl8169
+    jmp activate_print_ok
+.fail:
+    mov dword [rtl8169_present], 0
+    mov esi, arg_rtl8169
+    jmp activate_print_fail
+
 do_activate_e1000:
     call e1000_probe
     cmp eax, 1
@@ -1740,6 +1929,18 @@ do_activate_e1000:
     mov esi, arg_e1000
     jmp activate_print_fail
 
+do_activate_pcnet:
+    call pcnet_init
+    cmp eax, 1
+    jne .fail
+    mov dword [net_driver_available], 1
+    mov esi, arg_pcnet
+    jmp activate_print_ok
+.fail:
+    mov dword [pcnet_present], 0
+    mov esi, arg_pcnet
+    jmp activate_print_fail
+
 do_activate_ac97:
     call ac97_init
     cmp eax, 1
@@ -1756,6 +1957,18 @@ do_activate_ac97:
     mov dword [audio_driver_available], 0
 .done_fail:
     mov esi, arg_ac97
+    jmp activate_print_fail
+
+do_activate_intelhda:
+    call intelhda_init
+    cmp eax, 1
+    jne .fail
+    mov dword [audio_driver_available], 1
+    mov esi, arg_intelhda
+    jmp activate_print_ok
+.fail:
+    mov dword [intelhda_present], 0
+    mov esi, arg_intelhda
     jmp activate_print_fail
 
 do_activate_sb16:
@@ -1830,7 +2043,48 @@ do_activate_ram:
     mov esi, arg_ram
     jmp activate_print_ok
 
+do_activate_nvme:
+    mov dword [nvme_pcie_present], 1
+    mov esi, arg_nvme
+    jmp activate_print_ok
+
+do_activate_ahci:
+    mov dword [ahci_sata_present], 1
+    mov esi, arg_ahci
+    jmp activate_print_ok
+
+do_activate_usb1:
+    mov dword [usb_1_0_uhci_present], 1
+    mov esi, arg_usb1
+    jmp activate_print_ok
+
+do_activate_usb2:
+    mov dword [usb_2_0_ehci_present], 1
+    mov esi, arg_usb2
+    jmp activate_print_ok
+
+do_activate_usb3:
+    mov dword [usb_3_0_xhci_present], 1
+    mov esi, arg_usb3
+    jmp activate_print_ok
+
+do_activate_ich6:
+    mov dword [ich6_ide_present], 1
+    mov esi, arg_ich6
+    jmp activate_print_ok
+
+do_activate_piix3:
+    mov dword [piix3_ide_present], 1
+    mov esi, arg_piix3
+    jmp activate_print_ok
+
+do_activate_piix4:
+    mov dword [piix4_ide_present], 1
+    mov esi, arg_piix4
+    jmp activate_print_ok
+
 do_activate_all:
+    call pci_scan_bus0
     call fs_init_ram
     mov dword [fs_driver_available], 1
     call floppy_probe_legacy
@@ -1881,6 +2135,13 @@ do_activate_all:
     mov dword [audio_driver_available], 1
     mov dword [active_audio_driver], 2
 .done:
+    call intelhda_init
+    call rtl8169_init
+    call pcnet_init
+    call intel_pro1000_init_all
+    call rtl_family_init_all
+    call pcnet_family_init_all
+    call storage_bus_init_all
     mov esi, msg_activate_all_ok
     call api_print_string
     jmp do_devices
@@ -3301,6 +3562,50 @@ do_mouse:
     movzx eax, byte [mouse_last_ack]
     call print_hex32
     jmp shell_loop
+
+do_root:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .bad
+    mov edi, arg_root_key
+    call strcmp
+    cmp eax, 0
+    jne .bad
+    mov dword [root_enabled], 1
+    mov esi, msg_root_ok
+    call api_print_string
+    jmp shell_loop
+.bad:
+    mov esi, msg_root_bad
+    call api_print_string
+    jmp shell_loop
+
+find_opt_r:
+    ; ESI = arg string. EAX=1 si contiene " -r" o "-r"
+    push esi
+.scan:
+    mov al, [esi]
+    cmp al, 0
+    je .no
+    cmp al, '-'
+    jne .next
+    cmp byte [esi+1], 'r'
+    jne .next
+    cmp byte [esi+2], 0
+    je .yes
+    cmp byte [esi+2], ' '
+    je .yes
+.next:
+    inc esi
+    jmp .scan
+.yes:
+    mov eax, 1
+    pop esi
+    ret
+.no:
+    xor eax, eax
+    pop esi
+    ret
 
 history_push_if_nonempty:
     pusha

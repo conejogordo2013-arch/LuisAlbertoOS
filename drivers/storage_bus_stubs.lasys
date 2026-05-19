@@ -1,0 +1,42 @@
+; Storage and bus controller stubs (experimental)
+
+nvme_pcie_present   dd 0
+ahci_sata_present   dd 0
+usb_1_0_uhci_present dd 0
+usb_2_0_ehci_present dd 0
+usb_3_0_xhci_present dd 0
+ich6_ide_present    dd 0
+piix3_ide_present   dd 0
+piix4_ide_present   dd 0
+
+storage_bus_init_all:
+    cmp dword [pci_nvme_bar0], 0
+    sete al
+    movzx eax, al
+    xor eax, 1
+    mov [nvme_pcie_present], eax
+    cmp dword [pci_ahci_bar0], 0
+    sete al
+    movzx eax, al
+    xor eax, 1
+    mov [ahci_sata_present], eax
+    cmp dword [pci_usb_uhci_bar0], 0
+    sete al
+    movzx eax, al
+    xor eax, 1
+    mov [usb_1_0_uhci_present], eax
+    cmp dword [pci_usb_ehci_bar0], 0
+    sete al
+    movzx eax, al
+    xor eax, 1
+    mov [usb_2_0_ehci_present], eax
+    cmp dword [pci_usb_xhci_bar0], 0
+    sete al
+    movzx eax, al
+    xor eax, 1
+    mov [usb_3_0_xhci_present], eax
+    mov dword [ich6_ide_present], 1
+    mov dword [piix3_ide_present], 1
+    mov dword [piix4_ide_present], 1
+    mov eax, 1
+    ret

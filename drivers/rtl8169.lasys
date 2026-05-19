@@ -1,0 +1,15 @@
+; Realtek RTL8169 driver stub (experimental)
+rtl8169_present dd 0
+rtl8169_init:
+    cmp dword [pci_rtl8169_bar0], 0
+    jne .found
+    cmp dword [pci_rtl8169_bar1], 0
+    je .no
+.found:
+    mov dword [rtl8169_present], 1
+    mov eax, 1
+    ret
+.no:
+    mov dword [rtl8169_present], 0
+    xor eax, eax
+    ret
