@@ -1,8 +1,10 @@
 [BITS 16]
-[ORG 0x1000]
+[ORG 0x10000]
 
 kernel_entry:
     cli                     ; Disable interrupts (Crucial for PM switch)
+    mov ax, cs              ; Kernel is loaded at 1000:0000; use CS for 16-bit data refs
+    mov ds, ax
     
     ; Load Global Descriptor Table (GDT)
     lgdt [gdt_descriptor]
@@ -13,7 +15,7 @@ kernel_entry:
     mov cr0, eax
     
     ; Far jump to flush instruction pipeline and set CS
-    jmp 0x08:kernel_32
+    jmp dword 0x08:kernel_32
 
 [BITS 32]
 kernel_32:

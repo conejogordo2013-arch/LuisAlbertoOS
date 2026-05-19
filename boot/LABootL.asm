@@ -1,8 +1,8 @@
 [BITS 16]
 [ORG 0x7C00]
 
-KERNEL_LOAD_SEG  equ 0x0000
-KERNEL_LOAD_OFF  equ 0x1000
+KERNEL_LOAD_SEG  equ 0x1000
+KERNEL_LOAD_OFF  equ 0x0000
 KERNEL_SECTORS   equ 80
 SECTORS_PER_TRK  equ 18
 
@@ -14,6 +14,7 @@ start:
     mov ss, ax
     mov sp, 0x7C00
     sti
+    cld
     mov [boot_drive], dl
 
     ; Print Boot Message
@@ -28,7 +29,9 @@ print_loop:
 
 load_kernel:
     ; BIOS reads must not cross track boundaries on many machines.
-    ; Load one sector at a time from CHS 0/0/2 into 0000:1000.
+    ; Load one sector at a time from CHS 0/0/2 into 1000:0000.
+    ; The old 0000:1000 destination overlapped the boot sector at 0000:7C00
+    ; after enough sectors and could hang before the kernel entry executed.
     mov ax, KERNEL_LOAD_SEG
     mov es, ax
     mov bx, KERNEL_LOAD_OFF

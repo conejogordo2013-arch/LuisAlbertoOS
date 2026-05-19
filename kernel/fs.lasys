@@ -12,7 +12,7 @@ DATA_LBA    equ 145
 DIR_BUFFER  equ 0x5000  ; Directorio en memoria
 FILE_BUFFER equ 0x6000  ; Buffer I/O
 APP_POINTER equ 0x7000  ; Puntero a app cargada
-RAMFS_DATA  equ 0xD000  ; 16 archivos x FS_FILE_SECTORS para fallback sin ATA
+RAMFS_DATA  equ 0x140000 ; 16 archivos x FS_FILE_SECTORS; fuera del kernel cargado en 0x10000
 DIR_ENTRY_SIZE equ 26
 FS_FILE_SECTORS equ 8
 FS_MAX_FILE_SIZE equ FS_FILE_SECTORS*512
