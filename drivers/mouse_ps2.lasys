@@ -8,12 +8,17 @@ mouse_ready      dd 0
 mouse_x          dd 0
 mouse_y          dd 0
 mouse_buttons    dd 0
+mouse_buttons_prev dd 0
+mouse_buttons_edge dd 0
 mouse_packets    dd 0
 mouse_byte_index dd 0
 mouse_pkt0       db 0
 mouse_pkt1       db 0
 mouse_pkt2       db 0
 mouse_last_ack   db 0
+mouse_wheel      dd 0
+mouse_max_x      dd 319
+mouse_max_y      dd 199
 
 mouse_wait_input_clear:
     push ecx
@@ -108,6 +113,10 @@ mouse_init:
     jne .fail
     mov dword [mouse_ready], 1
     mov dword [mouse_byte_index], 0
+    mov dword [mouse_buttons], 0
+    mov dword [mouse_buttons_prev], 0
+    mov dword [mouse_buttons_edge], 0
+    mov dword [mouse_wheel], 0
     ret
 .fail:
     mov dword [mouse_ready], 0
@@ -138,12 +147,63 @@ mouse_irq_handle_byte:
 
     movzx eax, byte [mouse_pkt0]
     and eax, 0x07
+    mov ebx, [mouse_buttons]
+    mov [mouse_buttons_prev], ebx
     mov [mouse_buttons], eax
+    xor eax, ebx
+    and eax, [mouse_buttons]
+    mov [mouse_buttons_edge], eax
 
+    ; Bit 6/7 in packet0 indicate overflow: discard movement delta of this packet.
+    movzx eax, byte [mouse_pkt0]
+    test eax, 0xC0
+    jnz .done
+
+    ; Suavizado simple: si el desplazamiento es grande, reducir a la mitad.
     movsx eax, byte [mouse_pkt1]
+    cmp eax, 24
+    jle .chk_x_neg
+    sar eax, 1
+.chk_x_neg:
+    cmp eax, -24
+    jge .x_apply
+    sar eax, 1
+.x_apply:
     add [mouse_x], eax
+
     movsx eax, byte [mouse_pkt2]
+    cmp eax, 24
+    jle .chk_y_neg
+    sar eax, 1
+.chk_y_neg:
+    cmp eax, -24
+    jge .y_apply
+    sar eax, 1
+.y_apply:
     sub [mouse_y], eax
+
+    ; Mantener el cursor dentro de un área segura configurable.
+    mov eax, [mouse_x]
+    cmp eax, 0
+    jge .mx_hi
+    xor eax, eax
+    mov [mouse_x], eax
+.mx_hi:
+    mov ebx, [mouse_max_x]
+    cmp eax, ebx
+    jle .my_low
+    mov [mouse_x], ebx
+.my_low:
+    mov eax, [mouse_y]
+    cmp eax, 0
+    jge .my_hi
+    xor eax, eax
+    mov [mouse_y], eax
+.my_hi:
+    mov ebx, [mouse_max_y]
+    cmp eax, ebx
+    jle .done
+    mov [mouse_y], ebx
 .done:
     pop ebx
     pop eax
