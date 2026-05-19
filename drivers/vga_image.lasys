@@ -11,6 +11,10 @@ desk_cmd_min    dd 0
 desk_prev_left  dd 0
 desk_prev_right dd 0
 desk_dragging   dd 0
+desk_start_open dd 0
+desk_app_explorer dd 0
+desk_app_editor   dd 0
+desk_app_taskmgr  dd 0
 desk_win_x      dd 24
 desk_win_y      dd 18
 desk_win_w      dd 272
@@ -26,30 +30,79 @@ vga_desktop_view:
     and eax, 1
     mov ebx, [desk_prev_left]
     mov [desk_prev_left], eax
-    mov ecx, [mouse_buttons]
-    shr ecx, 1
-    and ecx, 1
-    mov edx, [desk_prev_right]
-    mov [desk_prev_right], ecx
     mov ecx, [mouse_x]
     mov edx, [mouse_y]
 
-    ; Click derecho (flanco): restaurar layout por defecto rápido.
-    cmp ecx, 1
-    jne .left_click_logic
-    cmp edx, 0
-    jne .left_click_logic
-    mov dword [desk_cmd_min], 0
-    mov dword [desk_win_x], 24
-    mov dword [desk_win_y], 18
-    mov dword [desk_win_w], 272
-    mov dword [desk_win_h], 130
-
-.left_click_logic:
     cmp eax, 1
     jne .drag_release
     cmp ebx, 0
     jne .drag_step
+
+    ; Boton inicio "LAOS" (x:4..52, y:189..198)
+    cmp ecx, 4
+    jb .left_click_logic
+    cmp ecx, 52
+    ja .left_click_logic
+    cmp edx, 189
+    jb .left_click_logic
+    cmp edx, 198
+    ja .left_click_logic
+    xor dword [desk_start_open], 1
+    jmp .drag_step
+
+.left_click_logic:
+    cmp dword [desk_start_open], 1
+    jne .cmd_minmax
+    ; Menu inicio: apps + reboot/shutdown/text mode
+    ; area x:4..156, y:116..186
+    cmp ecx, 4
+    jb .cmd_minmax
+    cmp ecx, 156
+    ja .cmd_minmax
+    cmp edx, 116
+    jb .cmd_minmax
+    cmp edx, 186
+    ja .cmd_minmax
+    cmp edx, 126
+    jbe .menu_cmd
+    cmp edx, 138
+    jbe .menu_explorer
+    cmp edx, 150
+    jbe .menu_editor
+    cmp edx, 162
+    jbe .menu_taskmgr
+    cmp edx, 162
+    jbe .menu_reboot
+    cmp edx, 174
+    jbe .menu_shutdown
+    jmp .exit_desktop
+.menu_cmd:
+    mov dword [desk_cmd_min], 0
+    mov dword [desk_start_open], 0
+    jmp .drag_step
+.menu_explorer:
+    xor dword [desk_app_explorer], 1
+    mov dword [desk_start_open], 0
+    jmp .drag_step
+.menu_editor:
+    xor dword [desk_app_editor], 1
+    mov dword [desk_start_open], 0
+    jmp .drag_step
+.menu_taskmgr:
+    xor dword [desk_app_taskmgr], 1
+    mov dword [desk_start_open], 0
+    jmp .drag_step
+.menu_reboot:
+    mov al, 0xFE
+    out 0x64, al
+    jmp .drag_step
+.menu_shutdown:
+    cli
+.halt_loop:
+    hlt
+    jmp .halt_loop
+
+.cmd_minmax:
 
     ; Botón minimizar (_)
     mov esi, [desk_win_x]
@@ -69,21 +122,21 @@ vga_desktop_view:
     xor dword [desk_cmd_min], 1
     jmp .drag_step
 .chk_max:
-    ; Botón maximizar ([]): alterna tamaño
+    ; Botón maximizar ([]): alterna tamaño (CMD no tiene cerrar)
     mov esi, [desk_win_x]
     add esi, 262
     cmp ecx, esi
-    jb .chk_close
+    jb .chk_drag
     add esi, 12
     cmp ecx, esi
-    ja .chk_close
+    ja .chk_drag
     mov esi, [desk_win_y]
     add esi, 2
     cmp edx, esi
-    jb .chk_close
+    jb .chk_drag
     add esi, 10
     cmp edx, esi
-    ja .chk_close
+    ja .chk_drag
     cmp dword [desk_win_x], 2
     jne .set_max
     mov dword [desk_win_x], 24
@@ -97,23 +150,6 @@ vga_desktop_view:
     mov dword [desk_win_w], 316
     mov dword [desk_win_h], 182
     jmp .drag_step
-.chk_close:
-    ; Botón cierre (X): salir del desktop
-    mov esi, [desk_win_x]
-    add esi, 278
-    cmp ecx, esi
-    jb .chk_drag
-    add esi, 12
-    cmp ecx, esi
-    ja .chk_drag
-    mov esi, [desk_win_y]
-    add esi, 2
-    cmp edx, esi
-    jb .chk_drag
-    add esi, 10
-    cmp edx, esi
-    ja .chk_drag
-    jmp .exit_desktop
 .chk_drag:
     ; Drag de barra de título
     mov esi, [desk_win_x]
@@ -170,6 +206,41 @@ vga_desktop_view:
     mov ecx, 320*12
     mov al, 8
     rep stosb
+    ; Boton inicio LAOS
+    mov edi, VGA_VRAM + (320*189) + 4
+    mov ecx, 48*9
+    mov al, 2
+    rep stosb
+
+    ; panel info inferior izq (internet/hora/drivers)
+    mov edi, VGA_VRAM + (320*189) + 58
+    mov ecx, 82*9
+    mov al, 3
+    rep stosb
+
+    ; estado de apps en barra (bloques)
+    cmp dword [desk_app_explorer], 0
+    je .tb_editor
+    mov edi, VGA_VRAM + (320*189) + 144
+    mov ecx, 12*9
+    mov al, 10
+    rep stosb
+.tb_editor:
+    cmp dword [desk_app_editor], 0
+    je .tb_taskmgr
+    mov edi, VGA_VRAM + (320*189) + 158
+    mov ecx, 12*9
+    mov al, 11
+    rep stosb
+.tb_taskmgr:
+    cmp dword [desk_app_taskmgr], 0
+    je .cmd_window
+    mov edi, VGA_VRAM + (320*189) + 172
+    mov ecx, 12*9
+    mov al, 12
+    rep stosb
+
+.cmd_window:
     cmp dword [desk_cmd_min], 1
     je .status_only
     mov eax, [desk_win_y]
@@ -190,7 +261,7 @@ vga_desktop_view:
     pop ebx
     dec ebx
     jnz .wrow
-    ; title + botones (_/[])
+    ; title + botones (_/[])  sin X para CMD
     mov eax, [desk_win_y]
     imul eax, 320
     add eax, [desk_win_x]
@@ -212,6 +283,80 @@ vga_desktop_view:
     mov al, 14
     rep stosb
     add edi, 4
+    mov ecx, 12
+    mov al, 12
+    rep stosb
+
+    ; Ventanas secundarias (cerrables)
+    cmp dword [desk_app_explorer], 1
+    jne .draw_editor
+    mov edi, VGA_VRAM + (320*28) + 38
+    mov ecx, 220*70
+    mov al, 9
+    rep stosb
+    mov edi, VGA_VRAM + (320*28) + 38
+    mov ecx, 220*8
+    mov al, 1
+    rep stosb
+.draw_editor:
+    cmp dword [desk_app_editor], 1
+    jne .draw_taskmgr
+    mov edi, VGA_VRAM + (320*42) + 56
+    mov ecx, 196*62
+    mov al, 14
+    rep stosb
+    mov edi, VGA_VRAM + (320*42) + 56
+    mov ecx, 196*8
+    mov al, 4
+    rep stosb
+.draw_taskmgr:
+    cmp dword [desk_app_taskmgr], 1
+    jne .draw_startmenu
+    mov edi, VGA_VRAM + (320*56) + 74
+    mov ecx, 172*54
+    mov al, 13
+    rep stosb
+    mov edi, VGA_VRAM + (320*56) + 74
+    mov ecx, 172*8
+    mov al, 5
+    rep stosb
+
+.draw_startmenu:
+    ; menu inicio simple
+    cmp dword [desk_start_open], 1
+    jne .status_only
+    mov edi, VGA_VRAM + (320*116) + 4
+    mov ecx, 152*70
+    mov al, 8
+    rep stosb
+    mov edi, VGA_VRAM + (320*116) + 4
+    mov ecx, 152*10
+    mov al, 4
+    rep stosb
+    mov edi, VGA_VRAM + (320*127) + 4
+    mov ecx, 152*10
+    mov al, 9
+    rep stosb
+    mov edi, VGA_VRAM + (320*138) + 4
+    mov ecx, 152*10
+    mov al, 14
+    rep stosb
+    mov edi, VGA_VRAM + (320*149) + 4
+    mov ecx, 152*10
+    mov al, 13
+    rep stosb
+    mov edi, VGA_VRAM + (320*160) + 4
+    mov ecx, 152*10
+    mov al, 4
+    rep stosb
+    mov edi, VGA_VRAM + (320*171) + 4
+    mov ecx, 152*10
+    mov al, 5
+    rep stosb
+    mov edi, VGA_VRAM + (320*182) + 4
+    mov ecx, 152*5
+    mov al, 6
+    rep stosb
 .status_only:
     nop
     mov eax, [mouse_x]
@@ -224,9 +369,32 @@ vga_desktop_view:
     jb .poll
     cmp edx, 198
     ja .poll
+    ; Cursor tipo '+'
     imul ebx, edx, 320
     add ebx, eax
     mov byte [VGA_VRAM + ebx], 15
+    cmp eax, 2
+    jb .poll
+    mov byte [VGA_VRAM + ebx - 1], 15
+    mov byte [VGA_VRAM + ebx - 2], 15
+    cmp eax, 317
+    ja .poll
+    mov byte [VGA_VRAM + ebx + 1], 15
+    mov byte [VGA_VRAM + ebx + 2], 15
+    cmp edx, 2
+    jb .poll
+    mov esi, ebx
+    sub esi, 320
+    mov byte [VGA_VRAM + esi], 15
+    sub esi, 320
+    mov byte [VGA_VRAM + esi], 15
+    cmp edx, 197
+    ja .poll
+    mov esi, ebx
+    add esi, 320
+    mov byte [VGA_VRAM + esi], 15
+    add esi, 320
+    mov byte [VGA_VRAM + esi], 15
 .poll:
     in al, 0x64
     test al, 1
