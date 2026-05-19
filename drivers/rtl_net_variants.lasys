@@ -1,0 +1,26 @@
+; Realtek RTL network family stubs (experimental)
+
+rtl8100_present dd 0
+rtl8101_present dd 0
+rtl8110_present dd 0
+rtl8111_present dd 0
+rtl8125_present dd 0
+rtl8136_present dd 0
+rtl8137_present dd 0
+rtl8139c_present dd 0
+rtl8168_present dd 0
+rtl8169_family_present dd 0
+
+rtl_family_init_all:
+    mov dword [rtl8100_present], 1
+    mov dword [rtl8101_present], 1
+    mov dword [rtl8110_present], 1
+    mov dword [rtl8111_present], 1
+    mov dword [rtl8125_present], 1
+    mov dword [rtl8136_present], 1
+    mov dword [rtl8137_present], 1
+    mov dword [rtl8139c_present], 1
+    mov dword [rtl8168_present], 1
+    mov dword [rtl8169_family_present], 1
+    mov eax, 1
+    ret

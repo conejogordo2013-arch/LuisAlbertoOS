@@ -68,8 +68,15 @@ gdt_descriptor:
 %include "kernel/net.lasys"        ; <--- Añadir Pila de Red
 %include "drivers/ac97.lasys"
 %include "drivers/sb16.lasys"
+%include "drivers/intelhda.lasys"
 %include "drivers/e1000.lasys"
+%include "drivers/rtl8169.lasys"
+%include "drivers/pcnet.lasys"
+%include "drivers/intel_pro1000_variants.lasys"
+%include "drivers/rtl_net_variants.lasys"
+%include "drivers/pcnet_variants.lasys"
 %include "drivers/storage_extra.lasys"
+%include "drivers/storage_bus_stubs.lasys"
 %include "kernel/pci.lasys"
 
 %include "kernel/interrupts.lasys"

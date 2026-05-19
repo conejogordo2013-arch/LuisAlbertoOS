@@ -1,0 +1,15 @@
+; Intel HD Audio driver stub (experimental)
+intelhda_present dd 0
+intelhda_init:
+    cmp dword [pci_intelhda_bar0], 0
+    jne .found
+    cmp dword [pci_intelhda_bar1], 0
+    je .no
+.found:
+    mov dword [intelhda_present], 1
+    mov eax, 1
+    ret
+.no:
+    mov dword [intelhda_present], 0
+    xor eax, eax
+    ret

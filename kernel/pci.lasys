@@ -13,6 +13,17 @@ pci_e1000_bar0 dd 0
 pci_e1000_bar1 dd 0
 pci_ac97_bar0 dd 0
 pci_ac97_bar1 dd 0
+pci_rtl8169_bar0 dd 0
+pci_rtl8169_bar1 dd 0
+pci_pcnet_bar0 dd 0
+pci_pcnet_bar1 dd 0
+pci_intelhda_bar0 dd 0
+pci_intelhda_bar1 dd 0
+pci_nvme_bar0 dd 0
+pci_ahci_bar0 dd 0
+pci_usb_uhci_bar0 dd 0
+pci_usb_ehci_bar0 dd 0
+pci_usb_xhci_bar0 dd 0
 
 pci_cfg_read:
     ; IN: EAX = config address, OUT: EAX=data
@@ -36,6 +47,17 @@ pci_scan_bus0:
     mov dword [pci_e1000_bar1], 0
     mov dword [pci_ac97_bar0], 0
     mov dword [pci_ac97_bar1], 0
+    mov dword [pci_rtl8169_bar0], 0
+    mov dword [pci_rtl8169_bar1], 0
+    mov dword [pci_pcnet_bar0], 0
+    mov dword [pci_pcnet_bar1], 0
+    mov dword [pci_intelhda_bar0], 0
+    mov dword [pci_intelhda_bar1], 0
+    mov dword [pci_nvme_bar0], 0
+    mov dword [pci_ahci_bar0], 0
+    mov dword [pci_usb_uhci_bar0], 0
+    mov dword [pci_usb_ehci_bar0], 0
+    mov dword [pci_usb_xhci_bar0], 0
     xor ebx, ebx
 .scan:
     mov eax, 0x80000000
@@ -80,11 +102,97 @@ pci_scan_bus0:
     jmp .next
 .chk_ac97:
     cmp eax, 0x24158086
-    jne .next
+    jne .chk_rtl8169
     mov eax, [pci_last_bar0]
     mov [pci_ac97_bar0], eax
     mov eax, [pci_last_bar1]
     mov [pci_ac97_bar1], eax
+    jmp .chk_class
+.chk_rtl8169:
+    cmp eax, 0x816910EC
+    jne .chk_pcnet
+    mov eax, [pci_last_bar0]
+    mov [pci_rtl8169_bar0], eax
+    mov eax, [pci_last_bar1]
+    mov [pci_rtl8169_bar1], eax
+    jmp .chk_class
+.chk_pcnet:
+    cmp eax, 0x20001022
+    jne .chk_class
+    mov eax, [pci_last_bar0]
+    mov [pci_pcnet_bar0], eax
+    mov eax, [pci_last_bar1]
+    mov [pci_pcnet_bar1], eax
+.chk_class:
+    mov eax, 0x80000008
+    mov ecx, ebx
+    shl ecx, 11
+    or eax, ecx
+    call pci_cfg_read
+    mov edx, eax
+    shr edx, 24
+    cmp dl, 0x04
+    jne .next
+    mov edx, eax
+    shr edx, 16
+    and edx, 0xFF
+    cmp dl, 0x03
+    je .class_hda
+    cmp dl, 0x01
+    je .class_storage
+    cmp dl, 0x0C
+    je .class_usb
+    jmp .next
+.class_hda:
+    mov eax, [pci_last_bar0]
+    mov [pci_intelhda_bar0], eax
+    mov eax, [pci_last_bar1]
+    mov [pci_intelhda_bar1], eax
+    jmp .next
+.class_storage:
+    mov edx, eax
+    shr edx, 8
+    and edx, 0xFF
+    cmp dl, 0x06
+    je .store_ahci
+    cmp dl, 0x08
+    je .store_nvme
+    jmp .next
+.store_ahci:
+    mov eax, [pci_last_bar0]
+    mov [pci_ahci_bar0], eax
+    jmp .next
+.store_nvme:
+    mov eax, [pci_last_bar0]
+    mov [pci_nvme_bar0], eax
+    jmp .next
+.class_usb:
+    mov edx, eax
+    shr edx, 8
+    and edx, 0xFF
+    cmp dl, 0x03
+    jne .next
+    mov edx, eax
+    shr edx, 8
+    and edx, 0xFF
+    cmp dl, 0x00
+    je .store_uhci
+    cmp dl, 0x20
+    je .store_ehci
+    cmp dl, 0x30
+    je .store_xhci
+    jmp .next
+.store_uhci:
+    mov eax, [pci_last_bar0]
+    mov [pci_usb_uhci_bar0], eax
+    jmp .next
+.store_ehci:
+    mov eax, [pci_last_bar0]
+    mov [pci_usb_ehci_bar0], eax
+    jmp .next
+.store_xhci:
+    mov eax, [pci_last_bar0]
+    mov [pci_usb_xhci_bar0], eax
 .next:
     inc ebx
     cmp ebx, 32

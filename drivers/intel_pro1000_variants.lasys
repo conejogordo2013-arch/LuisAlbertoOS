@@ -1,0 +1,25 @@
+; Intel PRO/1000 family stubs (experimental)
+; Includes common emulated/server variants.
+
+intel_e1000_82540em_present dd 0
+intel_e1000_82545em_present dd 0
+intel_e1000_82546eb_present dd 0
+intel_e1000e_ich8_present   dd 0
+intel_e1000e_ich9_present   dd 0
+intel_e1000e_ich10_present  dd 0
+intel_i217_present          dd 0
+intel_i218_present          dd 0
+intel_i219_present          dd 0
+
+intel_pro1000_init_all:
+    mov dword [intel_e1000_82540em_present], 1
+    mov dword [intel_e1000_82545em_present], 1
+    mov dword [intel_e1000_82546eb_present], 1
+    mov dword [intel_e1000e_ich8_present], 1
+    mov dword [intel_e1000e_ich9_present], 1
+    mov dword [intel_e1000e_ich10_present], 1
+    mov dword [intel_i217_present], 1
+    mov dword [intel_i218_present], 1
+    mov dword [intel_i219_present], 1
+    mov eax, 1
+    ret
