@@ -104,7 +104,7 @@ cmd_roadmap   db "roadmap",0
 cmd_pciscan   db "pciscan",0
 cmd_history   db "history",0
 cmd_color     db "color",0
-cmd_tui       db "tui",0
+cmd_tui       db "desktop",0
 cmd_fssync    db "fssync",0
 cmd_fsreload  db "fsreload",0
 cmd_timer     db "timer",0
@@ -178,7 +178,7 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "pciscan- Escaneo PCI bus0",0x0A, \
                 "history- Historial shell (8)",0x0A, \
                 "color  - Color shell (white/green/cyan/red)",0x0A, \
-                "tui    - Vista TUI basica",0x0A, \
+                "desktop- Vista VGA basica",0x0A, \
                 "fssync - Sincroniza FS persistente",0x0A, \
                 "fsreload- Recarga directorio desde disco",0x0A, \
                 "timer  - Ajuste PIT/scheduler",0x0A, \
@@ -258,10 +258,10 @@ msg_history_hdr   db 0x0A,"Historial reciente:",0
 msg_autoc_hint    db 0x0A,"[TAB] autocompletado aplicado.",0
 msg_color_use     db 0x0A,"Uso: color <white|green|cyan|red>",0
 msg_color_ok      db 0x0A,"Color aplicado.",0
-msg_tui_hdr       db 0x0A,"+---------------- LuisAlbertoOS TUI ----------------+",0x0A,0
-msg_tui_row1      db "| Kernel: OK | FS: READY | NET: DEMO | AUDIO: DEMO   |",0x0A,0
-msg_tui_row2      db "| Comandos: help, dir, history, roadmap, pciscan     |",0x0A,0
-msg_tui_row3      db "+-----------------------------------------------------+",0
+msg_tui_hdr       db 0
+msg_tui_row1      db 0
+msg_tui_row2      db 0
+msg_tui_row3      db 0
 msg_fssync_ok     db 0x0A,"FS sincronizado a backend persistente.",0
 msg_fssync_no     db 0x0A,"FS en RAM: no hay persistencia fisica que sincronizar.",0
 msg_fsreload_ok   db 0x0A,"Directorio FS recargado desde backend.",0
@@ -837,7 +837,6 @@ execute:
     call strcmp
     cmp eax, 0
     je do_mouse
-
     mov edi, cmd_block
     call strcmp
     cmp eax, 0
@@ -3193,14 +3192,10 @@ do_color:
     jmp shell_loop
 
 do_tui:
-    mov esi, msg_tui_hdr
-    call api_print_string
-    mov esi, msg_tui_row1
-    call api_print_string
-    mov esi, msg_tui_row2
-    call api_print_string
-    mov esi, msg_tui_row3
-    call api_print_string
+    pusha
+    call vga_desktop_view
+    popa
+    call api_clear_screen
     jmp shell_loop
 
 do_fssync:
