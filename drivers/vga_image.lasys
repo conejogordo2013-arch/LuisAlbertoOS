@@ -9,6 +9,12 @@ VGA_VRAM    equ 0xA0000
 BMP_LOAD_AD equ 0x7000  ; Definido como APP_POINTER en fs.lasys
 desk_cmd_min    dd 0
 desk_prev_left  dd 0
+desk_prev_right dd 0
+desk_dragging   dd 0
+desk_win_x      dd 24
+desk_win_y      dd 18
+desk_win_w      dd 272
+desk_win_h      dd 130
 
 vga_desktop_view:
     mov esi, vga_regs_13h
@@ -18,26 +24,140 @@ vga_desktop_view:
     and eax, 1
     mov ebx, [desk_prev_left]
     mov [desk_prev_left], eax
-    cmp eax, 1
-    jne .no_click
-    cmp ebx, 0
-    jne .no_click
+    mov ecx, [mouse_buttons]
+    shr ecx, 1
+    and ecx, 1
+    mov edx, [desk_prev_right]
+    mov [desk_prev_right], ecx
+
     mov ecx, [mouse_x]
-    add ecx, 160
     mov edx, [mouse_y]
-    neg edx
-    add edx, 100
-    cmp ecx, 268
+
+    ; Click derecho (flanco): restaurar layout por defecto rápido.
+    cmp ecx, 1
+    jne .left_click_logic
+    cmp edx, 0
+    jne .left_click_logic
+    mov dword [desk_cmd_min], 0
+    mov dword [desk_win_x], 24
+    mov dword [desk_win_y], 18
+
+.left_click_logic:
+    cmp eax, 1
+    jne .drag_release
+    cmp ebx, 0
+    jne .drag_step
+
+    ; Botón minimizar (_)
+    mov esi, [desk_win_x]
+    add esi, 244
+    cmp ecx, esi
     jb .chk_max
-    cmp ecx, 283
+    add esi, 15
+    cmp ecx, esi
     ja .chk_max
-    cmp edx, 20
+    mov esi, [desk_win_y]
+    add esi, 2
+    cmp edx, esi
     jb .chk_max
-    cmp edx, 30
+    add esi, 10
+    cmp edx, esi
     ja .chk_max
     xor dword [desk_cmd_min], 1
-    jmp .no_click
+    jmp .drag_step
 .chk_max:
+    ; Botón maximizar ([]): alterna tamaño
+    mov esi, [desk_win_x]
+    add esi, 262
+    cmp ecx, esi
+    jb .chk_close
+    add esi, 12
+    cmp ecx, esi
+    ja .chk_close
+    mov esi, [desk_win_y]
+    add esi, 2
+    cmp edx, esi
+    jb .chk_close
+    add esi, 10
+    cmp edx, esi
+    ja .chk_close
+    cmp dword [desk_win_x], 2
+    jne .set_max
+    mov dword [desk_win_x], 24
+    mov dword [desk_win_y], 18
+    mov dword [desk_win_w], 272
+    mov dword [desk_win_h], 130
+    jmp .drag_step
+.set_max:
+    mov dword [desk_win_x], 2
+    mov dword [desk_win_y], 2
+    mov dword [desk_win_w], 316
+    mov dword [desk_win_h], 182
+    jmp .drag_step
+.chk_close:
+    ; Botón cierre (X): salir del desktop
+    mov esi, [desk_win_x]
+    add esi, 278
+    cmp ecx, esi
+    jb .chk_drag
+    add esi, 12
+    cmp ecx, esi
+    ja .chk_drag
+    mov esi, [desk_win_y]
+    add esi, 2
+    cmp edx, esi
+    jb .chk_drag
+    add esi, 10
+    cmp edx, esi
+    ja .chk_drag
+    jmp .exit_desktop
+.chk_drag:
+    ; Drag de barra de título
+    mov esi, [desk_win_x]
+    cmp ecx, esi
+    jb .drag_step
+    add esi, [desk_win_w]
+    cmp ecx, esi
+    ja .drag_step
+    mov esi, [desk_win_y]
+    cmp edx, esi
+    jb .drag_step
+    add esi, 12
+    cmp edx, esi
+    ja .drag_step
+    mov dword [desk_dragging], 1
+    jmp .drag_step
+
+.drag_release:
+    mov dword [desk_dragging], 0
+
+.drag_step:
+    cmp dword [desk_dragging], 1
+    jne .no_click
+    mov eax, [mouse_x]
+    sub eax, 136
+    cmp eax, 2
+    jge .drag_x_hi
+    mov eax, 2
+.drag_x_hi:
+    cmp eax, 44
+    jle .drag_x_ok
+    mov eax, 44
+.drag_x_ok:
+    mov [desk_win_x], eax
+
+    mov eax, [mouse_y]
+    sub eax, 6
+    cmp eax, 2
+    jge .drag_y_hi
+    mov eax, 2
+.drag_y_hi:
+    cmp eax, 58
+    jle .drag_y_ok
+    mov eax, 58
+.drag_y_ok:
+    mov [desk_win_y], eax
+
 .no_click:
     mov edi, VGA_VRAM
     mov ecx, 320*200
@@ -49,24 +169,42 @@ vga_desktop_view:
     rep stosb
     cmp dword [desk_cmd_min], 1
     je .status_only
-    mov edi, VGA_VRAM + (320*18) + 24
-    mov ebx, 130
+    mov eax, [desk_win_y]
+    imul eax, 320
+    add eax, [desk_win_x]
+    add eax, VGA_VRAM
+    mov edi, eax
+    mov ebx, [desk_win_h]
 .wrow:
     push ebx
-    mov ecx, 272
+    mov ecx, [desk_win_w]
     mov al, 7
     rep stosb
-    add edi, 320-272
+    mov eax, [desk_win_w]
+    mov edx, 320
+    sub edx, eax
+    add edi, edx
     pop ebx
     dec ebx
     jnz .wrow
     ; title + botones (_/[])
-    mov edi, VGA_VRAM + (320*18) + 24
-    mov ecx, 272*10
+    mov eax, [desk_win_y]
+    imul eax, 320
+    add eax, [desk_win_x]
+    add eax, VGA_VRAM
+    mov edi, eax
+    mov eax, [desk_win_w]
+    imul ecx, eax, 10
     mov al, 4
  .tbar2:
     rep stosb
-    mov edi, VGA_VRAM + (320*20) + 268
+    mov eax, [desk_win_y]
+    add eax, 2
+    imul eax, 320
+    add eax, [desk_win_x]
+    add eax, 244
+    add eax, VGA_VRAM
+    mov edi, eax
     mov ecx, 14
     mov al, 14
     rep stosb
@@ -74,10 +212,7 @@ vga_desktop_view:
 .status_only:
     nop
     mov eax, [mouse_x]
-    add eax, 160
     mov edx, [mouse_y]
-    neg edx
-    add edx, 100
     cmp eax, 1
     jb .poll
     cmp eax, 318
@@ -96,6 +231,7 @@ vga_desktop_view:
     in al, 0x60
     cmp al, 0x01
     jne .frame
+ .exit_desktop:
     mov esi, vga_regs_3h
     call vga_write_regs
     ret
