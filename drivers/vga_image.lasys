@@ -71,7 +71,7 @@ vga_desktop_view:
     jbe .menu_editor
     cmp edx, 162
     jbe .menu_taskmgr
-    cmp edx, 162
+    cmp edx, 174
     jbe .menu_reboot
     cmp edx, 174
     jbe .menu_shutdown
@@ -399,6 +399,10 @@ vga_desktop_view:
     in al, 0x64
     test al, 1
     jz .frame
+    ; Si el dato pendiente viene del mouse (AUX), no consumirlo aquí.
+    ; Evita romper paquetes PS/2 y el cursor "desaparecido".
+    test al, 0x20
+    jnz .frame
     in al, 0x60
     cmp al, 0x01
     jne .frame
