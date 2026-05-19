@@ -3,6 +3,7 @@
 
 cursor_x dd 0
 cursor_y dd 0
+text_attr db 0x0F
 
 api_clear_screen:
     pusha
@@ -66,7 +67,8 @@ api_print_string:
 
     mov al, [esi - 1]
     mov byte [ebx], al
-    mov byte [ebx + 1], 0x0F ; White text
+    mov al, [text_attr]
+    mov byte [ebx + 1], al
 
     inc dword [cursor_x]
     cmp dword [cursor_x], 80
@@ -98,9 +100,15 @@ api_backspace:
     mov ebx, 0xB8000
     add ebx, eax
     mov byte [ebx], 0x20
-    mov byte [ebx + 1], 0x0F
+    mov al, [text_attr]
+    mov byte [ebx + 1], al
 .done:
     popa
+    ret
+
+api_set_text_attr:
+    ; IN: AL = VGA attribute
+    mov [text_attr], al
     ret
 
 api_delay:

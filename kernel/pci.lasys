@@ -1,0 +1,95 @@
+%ifndef PCI_LASYS
+%define PCI_LASYS
+
+pci_found_count dd 0
+pci_last_bus dd 0
+pci_last_dev dd 0
+pci_last_vendor_device dd 0
+pci_last_bar0 dd 0
+pci_last_bar1 dd 0
+pci_rtl8139_bar0 dd 0
+pci_rtl8139_bar1 dd 0
+pci_e1000_bar0 dd 0
+pci_e1000_bar1 dd 0
+pci_ac97_bar0 dd 0
+pci_ac97_bar1 dd 0
+
+pci_cfg_read:
+    ; IN: EAX = config address, OUT: EAX=data
+    mov dx, 0x0CF8
+    out dx, eax
+    mov dx, 0x0CFC
+    in eax, dx
+    ret
+
+pci_scan_bus0:
+    pusha
+    mov dword [pci_found_count], 0
+    mov dword [pci_last_bus], 0
+    mov dword [pci_last_dev], 0
+    mov dword [pci_last_vendor_device], 0
+    mov dword [pci_last_bar0], 0
+    mov dword [pci_last_bar1], 0
+    mov dword [pci_rtl8139_bar0], 0
+    mov dword [pci_rtl8139_bar1], 0
+    mov dword [pci_e1000_bar0], 0
+    mov dword [pci_e1000_bar1], 0
+    mov dword [pci_ac97_bar0], 0
+    mov dword [pci_ac97_bar1], 0
+    xor ebx, ebx
+.scan:
+    mov eax, 0x80000000
+    mov ecx, ebx
+    shl ecx, 11
+    or eax, ecx
+    call pci_cfg_read
+    cmp eax, 0xFFFFFFFF
+    je .next
+    cmp ax, 0xFFFF
+    je .next
+    inc dword [pci_found_count]
+    mov [pci_last_vendor_device], eax
+    mov [pci_last_dev], ebx
+    mov eax, 0x80000010
+    mov ecx, ebx
+    shl ecx, 11
+    or eax, ecx
+    call pci_cfg_read
+    mov [pci_last_bar0], eax
+    mov eax, 0x80000014
+    mov ecx, ebx
+    shl ecx, 11
+    or eax, ecx
+    call pci_cfg_read
+    mov [pci_last_bar1], eax
+    mov eax, [pci_last_vendor_device]
+    cmp eax, 0x813910EC
+    jne .chk_e1000
+    mov eax, [pci_last_bar0]
+    mov [pci_rtl8139_bar0], eax
+    mov eax, [pci_last_bar1]
+    mov [pci_rtl8139_bar1], eax
+    jmp .next
+.chk_e1000:
+    cmp eax, 0x100E8086
+    jne .chk_ac97
+    mov eax, [pci_last_bar0]
+    mov [pci_e1000_bar0], eax
+    mov eax, [pci_last_bar1]
+    mov [pci_e1000_bar1], eax
+    jmp .next
+.chk_ac97:
+    cmp eax, 0x24158086
+    jne .next
+    mov eax, [pci_last_bar0]
+    mov [pci_ac97_bar0], eax
+    mov eax, [pci_last_bar1]
+    mov [pci_ac97_bar1], eax
+.next:
+    inc ebx
+    cmp ebx, 32
+    jb .scan
+    popa
+    ret
+
+%endif

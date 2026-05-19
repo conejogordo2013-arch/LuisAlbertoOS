@@ -16,12 +16,20 @@ shell_prompt      db "> ",0
 msg_welcome       db 0x0A,"LuisAlbertoOS Shell REAL v3.1 (Net Enabled)",0x0A,0
 msg_newline       db 0x0A,0
 
+cmd_guard_pre     dd 0xC0DEF00D
 cmd_buffer        times 128 db 0
+cmd_guard_post    dd 0xDEADBEEF
 char_buffer       db 0,0
 hex_buffer        times 9 db 0
+dec_buffer        times 12 db 0
 entry_name_buffer times 17 db 0
 arg_ptr           dd 0
 activate_arg2     dd 0
+hist_head         dd 0
+hist_count        dd 0
+hist_line_len     equ 64
+hist_max          equ 8
+history_ring      times hist_max*hist_line_len db 0
 
 current_path      times 128 db 0
 path_root_init    db "C:/",0
@@ -92,6 +100,15 @@ cmd_priority  db "priority",0
 cmd_preempt   db "preempt",0
 cmd_cdinfo    db "cdinfo",0
 cmd_lastpanic db "lastpanic",0
+cmd_roadmap   db "roadmap",0
+cmd_pciscan   db "pciscan",0
+cmd_history   db "history",0
+cmd_color     db "color",0
+cmd_tui       db "tui",0
+cmd_fssync    db "fssync",0
+cmd_fsreload  db "fsreload",0
+cmd_timer     db "timer",0
+cmd_mouse     db "mouse",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -157,6 +174,15 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "mktask - Crea task demo",0x0A, \
                 "exc    - Estado excepciones",0x0A, \
                 "lastpanic - Ultimo panic/log",0x0A, \
+                "roadmap- Hoja de ruta tecnica",0x0A, \
+                "pciscan- Escaneo PCI bus0",0x0A, \
+                "history- Historial shell (8)",0x0A, \
+                "color  - Color shell (white/green/cyan/red)",0x0A, \
+                "tui    - Vista TUI basica",0x0A, \
+                "fssync - Sincroniza FS persistente",0x0A, \
+                "fsreload- Recarga directorio desde disco",0x0A, \
+                "timer  - Ajuste PIT/scheduler",0x0A, \
+                "mouse  - Estado mouse PS/2",0x0A, \
                 "block  - Bloquear task",0x0A, \
                 "wake   - Despertar task0",0x0A, \
                 "journal- Estado journal FS",0x0A, \
@@ -218,6 +244,48 @@ msg_net_l4_tcp    db 0x0A,"L4: TCP",0
 msg_net_l4_udp    db 0x0A,"L4: UDP",0
 msg_net_proto     db 0x0A,"Proto stack real: ETH/ARP/IP/ICMP/TCP/UDP + DNS preparado (sin respuestas falsas)",0
 msg_net_paginf_use db 0x0A,"Uso: net paginf <host>",0
+msg_buf_guard_bad db 0x0A,"[PANIC] Corrupcion de cmd_buffer detectada.",0
+msg_pci_found     db 0x0A,"PCI devices (bus0): ",0
+msg_pci_last_dev  db 0x0A,"Last dev: ",0
+msg_pci_last_vd   db 0x0A,"VendorDevice: ",0
+msg_pci_last_bar0 db 0x0A,"BAR0: ",0
+msg_pci_last_bar1 db 0x0A,"BAR1: ",0
+msg_pci_rtl_hdr   db 0x0A,"RTL8139 BAR0/BAR1: ",0
+msg_pci_e1k_hdr   db 0x0A,"E1000 BAR0/BAR1: ",0
+msg_pci_ac97_hdr  db 0x0A,"AC97 BAR0/BAR1: ",0
+msg_sep_slash     db "/",0
+msg_history_hdr   db 0x0A,"Historial reciente:",0
+msg_autoc_hint    db 0x0A,"[TAB] autocompletado aplicado.",0
+msg_color_use     db 0x0A,"Uso: color <white|green|cyan|red>",0
+msg_color_ok      db 0x0A,"Color aplicado.",0
+msg_tui_hdr       db 0x0A,"+---------------- LuisAlbertoOS TUI ----------------+",0x0A,0
+msg_tui_row1      db "| Kernel: OK | FS: READY | NET: DEMO | AUDIO: DEMO   |",0x0A,0
+msg_tui_row2      db "| Comandos: help, dir, history, roadmap, pciscan     |",0x0A,0
+msg_tui_row3      db "+-----------------------------------------------------+",0
+msg_fssync_ok     db 0x0A,"FS sincronizado a backend persistente.",0
+msg_fssync_no     db 0x0A,"FS en RAM: no hay persistencia fisica que sincronizar.",0
+msg_fsreload_ok   db 0x0A,"Directorio FS recargado desde backend.",0
+msg_fsreload_no   db 0x0A,"No se pudo recargar FS (requiere modo ATA activo).",0
+msg_timer_use     db 0x0A,"Uso: timer <status|fast|slow>",0
+msg_timer_hz      db 0x0A,"PIT Hz: ",0
+msg_timer_q       db 0x0A,"Scheduler quantum: ",0
+msg_timer_pre     db 0x0A,"Preemptive: ",0
+msg_timer_fail    db 0x0A,"Error: PIT Hz invalido.",0
+msg_mouse_hdr     db 0x0A,"Mouse PS/2:",0
+msg_mouse_ready   db 0x0A,"Ready: ",0
+msg_mouse_packets db 0x0A,"Packets: ",0
+msg_mouse_x       db 0x0A,"X: ",0
+msg_mouse_y       db 0x0A,"Y: ",0
+msg_mouse_btn     db 0x0A,"Buttons: ",0
+msg_mouse_ack     db 0x0A,"Last ACK: ",0
+arg_timer_status  db "status",0
+arg_timer_fast    db "fast",0
+arg_timer_slow    db "slow",0
+arg_white         db "white",0
+arg_green         db "green",0
+arg_cyan          db "cyan",0
+arg_red           db "red",0
+msg_roadmap       db 0x0A,"Ver ROADMAP_TECNICO.md para detalle completo.",0
 msg_net_paginf_host db 0x0A,"Host: ",0
 msg_net_paginf_start db 0x0A,"PAGINF real: resolviendo gateway por ARP para DNS/ICMP...",0
 msg_net_paginf_wait db 0x0A,"Sin simular: usa net listen/recv para capturar ARP/DNS/ICMP reales; IP/puerto/ping se muestran cuando haya respuesta.",0
@@ -361,6 +429,8 @@ msg_hexdump_use   db 0x0A,"Uso: hexdump <archivo>",0
 msg_hexdump_hdr   db 0x0A,"Hexdump:",0x0A,0
 msg_run_use       db 0x0A,"Uso: run <sample1|textedit|taskmgr>",0
 msg_run_missing   db 0x0A,"App no encontrada.",0
+msg_run_fs_launch db 0x0A,"[RUN] App cargada desde FS: ",0
+msg_run_fs_tip    db 0x0A,"(demo) Ejecutando payload textual desde APP_POINTER.",0
 msg_yield_ok      db 0x0A,"Yield scheduler ejecutado.",0
 app_name_sample1  db "sample1",0
 app_name_textedit db "textedit",0
@@ -469,6 +539,10 @@ skip_init:
     call api_print_string
 
 shell_loop:
+    cmp dword [cmd_guard_pre], 0xC0DEF00D
+    jne do_buffer_panic
+    cmp dword [cmd_guard_post], 0xDEADBEEF
+    jne do_buffer_panic
     mov esi, msg_newline
     call api_print_string
     mov esi, current_path
@@ -486,6 +560,8 @@ read_key:
     call kbd_read_char
     cmp al, 0
     je read_key
+    cmp al, 0x09
+    je handle_tab_autocomplete
     cmp al, 0x0A
     je parse_command
     cmp al, 0x0D
@@ -504,6 +580,33 @@ read_key:
     pop eax
     jmp read_key
 
+handle_tab_autocomplete:
+    ; Autocompletado simple: completa primer match conocido
+    mov byte [edi], 0
+    mov esi, cmd_buffer
+    call autocomplete_builtin
+    cmp eax, 0
+    je read_key
+    ; recalcular longitud y refrescar linea visual
+    mov esi, msg_newline
+    call api_print_string
+    mov esi, current_path
+    call api_print_string
+    mov esi, shell_prompt
+    call api_print_string
+    mov esi, cmd_buffer
+    call api_print_string
+    mov edi, cmd_buffer
+    xor ecx, ecx
+.relen:
+    cmp byte [edi], 0
+    je .ok
+    inc edi
+    inc ecx
+    jmp .relen
+.ok:
+    jmp read_key
+
 handle_backspace:
     cmp ecx, 0
     je read_key
@@ -515,6 +618,8 @@ handle_backspace:
 
 parse_command:
     mov byte [edi], 0
+    mov esi, cmd_buffer
+    call history_push_if_nonempty
     mov esi, cmd_buffer
     mov dword [arg_ptr], 0
 
@@ -696,6 +801,42 @@ execute:
     call strcmp
     cmp eax, 0
     je do_lastpanic
+    mov edi, cmd_roadmap
+    call strcmp
+    cmp eax, 0
+    je do_roadmap
+    mov edi, cmd_pciscan
+    call strcmp
+    cmp eax, 0
+    je do_pciscan
+    mov edi, cmd_history
+    call strcmp
+    cmp eax, 0
+    je do_history
+    mov edi, cmd_color
+    call strcmp
+    cmp eax, 0
+    je do_color
+    mov edi, cmd_tui
+    call strcmp
+    cmp eax, 0
+    je do_tui
+    mov edi, cmd_fssync
+    call strcmp
+    cmp eax, 0
+    je do_fssync
+    mov edi, cmd_fsreload
+    call strcmp
+    cmp eax, 0
+    je do_fsreload
+    mov edi, cmd_timer
+    call strcmp
+    cmp eax, 0
+    je do_timer
+    mov edi, cmd_mouse
+    call strcmp
+    cmp eax, 0
+    je do_mouse
 
     mov edi, cmd_block
     call strcmp
@@ -901,6 +1042,10 @@ do_dir:
 .dir_loop:
     cmp byte [esi], 0    
     je .next_entry
+    mov al, [esi+25]
+    movzx eax, al
+    cmp eax, [fs_cwd_id]
+    jne .next_entry
     push esi
     push ecx
     call print_entry_name
@@ -1454,7 +1599,7 @@ do_activate:
     mov [activate_arg2], edi
 
     mov esi, [arg_ptr]
-    mov edi, arg_status
+    mov edi, arg_timer_status
     call strcmp
     cmp eax, 0
     je do_devices
@@ -2178,6 +2323,24 @@ do_run:
     call strcmp
     cmp eax, 0
     je .taskmgr
+    ; Fallback: carga app/archivo desde FS en vez de sectores fijos.
+    cmp dword [fs_driver_available], 0
+    je .missing
+    mov esi, [arg_ptr]
+    call fs_read_file
+    cmp eax, 0
+    je .missing
+    mov esi, msg_run_fs_launch
+    call api_print_string
+    mov esi, [arg_ptr]
+    call api_print_string
+    mov esi, msg_run_fs_tip
+    call api_print_string
+    mov ebx, api_table
+    mov esi, APP_POINTER
+    call [ebx + 0]
+    jmp shell_loop
+.missing:
     mov esi, msg_run_missing
     call api_print_string
     jmp shell_loop
@@ -2905,6 +3068,362 @@ do_vmunmap:
 
 do_help:
     mov esi, msg_help
+    call api_print_string
+    jmp shell_loop
+
+do_roadmap:
+    mov esi, msg_roadmap
+    call api_print_string
+    jmp shell_loop
+
+do_pciscan:
+    call pci_scan_bus0
+    mov esi, msg_pci_found
+    call api_print_string
+    mov eax, [pci_found_count]
+    call print_hex32
+    mov esi, msg_pci_last_dev
+    call api_print_string
+    mov eax, [pci_last_dev]
+    call print_hex32
+    mov esi, msg_pci_last_vd
+    call api_print_string
+    mov eax, [pci_last_vendor_device]
+    call print_hex32
+    mov esi, msg_pci_last_bar0
+    call api_print_string
+    mov eax, [pci_last_bar0]
+    call print_hex32
+    mov esi, msg_pci_last_bar1
+    call api_print_string
+    mov eax, [pci_last_bar1]
+    call print_hex32
+    mov esi, msg_pci_rtl_hdr
+    call api_print_string
+    mov eax, [pci_rtl8139_bar0]
+    call print_hex32
+    mov esi, msg_sep_slash
+    call api_print_string
+    mov eax, [pci_rtl8139_bar1]
+    call print_hex32
+    mov esi, msg_pci_e1k_hdr
+    call api_print_string
+    mov eax, [pci_e1000_bar0]
+    call print_hex32
+    mov esi, msg_sep_slash
+    call api_print_string
+    mov eax, [pci_e1000_bar1]
+    call print_hex32
+    mov esi, msg_pci_ac97_hdr
+    call api_print_string
+    mov eax, [pci_ac97_bar0]
+    call print_hex32
+    mov esi, msg_sep_slash
+    call api_print_string
+    mov eax, [pci_ac97_bar1]
+    call print_hex32
+    jmp shell_loop
+
+do_history:
+    mov esi, msg_history_hdr
+    call api_print_string
+    mov ecx, [hist_count]
+    cmp ecx, 0
+    je shell_loop
+    mov ebx, [hist_head]
+.hist_loop:
+    dec ebx
+    js .wrap
+    jmp .idx_ok
+.wrap:
+    mov ebx, hist_max-1
+.idx_ok:
+    mov edi, history_ring
+    imul eax, ebx, hist_line_len
+    add edi, eax
+    mov esi, msg_newline
+    call api_print_string
+    mov esi, edi
+    call api_print_string
+    loop .hist_loop
+    jmp shell_loop
+
+do_color:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .use
+    mov edi, arg_white
+    call strcmp
+    cmp eax, 0
+    je .white
+    mov edi, arg_green
+    call strcmp
+    cmp eax, 0
+    je .green
+    mov edi, arg_cyan
+    call strcmp
+    cmp eax, 0
+    je .cyan
+    mov edi, arg_red
+    call strcmp
+    cmp eax, 0
+    je .red
+.use:
+    mov esi, msg_color_use
+    call api_print_string
+    jmp shell_loop
+.white:
+    mov al, 0x0F
+    call api_set_text_attr
+    jmp .ok
+.green:
+    mov al, 0x0A
+    call api_set_text_attr
+    jmp .ok
+.cyan:
+    mov al, 0x0B
+    call api_set_text_attr
+    jmp .ok
+.red:
+    mov al, 0x0C
+    call api_set_text_attr
+.ok:
+    mov esi, msg_color_ok
+    call api_print_string
+    jmp shell_loop
+
+do_tui:
+    mov esi, msg_tui_hdr
+    call api_print_string
+    mov esi, msg_tui_row1
+    call api_print_string
+    mov esi, msg_tui_row2
+    call api_print_string
+    mov esi, msg_tui_row3
+    call api_print_string
+    jmp shell_loop
+
+do_fssync:
+    call fs_sync
+    cmp eax, 1
+    jne .ram
+    mov esi, msg_fssync_ok
+    call api_print_string
+    jmp shell_loop
+.ram:
+    mov esi, msg_fssync_no
+    call api_print_string
+    jmp shell_loop
+
+do_fsreload:
+    call fs_reload_dir
+    cmp eax, 1
+    jne .no
+    mov esi, msg_fsreload_ok
+    call api_print_string
+    jmp shell_loop
+.no:
+    mov esi, msg_fsreload_no
+    call api_print_string
+    jmp shell_loop
+
+do_timer:
+    mov esi, [arg_ptr]
+    cmp esi, 0
+    je .status
+    mov edi, arg_status
+    call strcmp
+    cmp eax, 0
+    je .status
+    mov edi, arg_timer_fast
+    call strcmp
+    cmp eax, 0
+    je .fast
+    mov edi, arg_timer_slow
+    call strcmp
+    cmp eax, 0
+    je .slow
+    mov esi, msg_timer_use
+    call api_print_string
+    jmp shell_loop
+.fast:
+    mov eax, 200
+    call pit_set_hz
+    cmp eax, 1
+    jne .pit_fail
+    mov dword [sched_quantum], 5
+    jmp .status
+.slow:
+    mov eax, 50
+    call pit_set_hz
+    cmp eax, 1
+    jne .pit_fail
+    mov dword [sched_quantum], 20
+    jmp .status
+.pit_fail:
+    mov esi, msg_timer_fail
+    call api_print_string
+.status:
+    mov esi, msg_timer_hz
+    call api_print_string
+    mov eax, [pit_hz]
+    call print_dec32
+    mov esi, msg_timer_q
+    call api_print_string
+    mov eax, [sched_quantum]
+    call print_dec32
+    mov esi, msg_timer_pre
+    call api_print_string
+    mov eax, [sched_preemptive]
+    call print_dec32
+    jmp shell_loop
+
+do_mouse:
+    mov esi, msg_mouse_hdr
+    call api_print_string
+    mov esi, msg_mouse_ready
+    call api_print_string
+    mov eax, [mouse_ready]
+    call print_hex32
+    mov esi, msg_mouse_packets
+    call api_print_string
+    mov eax, [mouse_packets]
+    call print_hex32
+    mov esi, msg_mouse_x
+    call api_print_string
+    mov eax, [mouse_x]
+    call print_hex32
+    mov esi, msg_mouse_y
+    call api_print_string
+    mov eax, [mouse_y]
+    call print_hex32
+    mov esi, msg_mouse_btn
+    call api_print_string
+    mov eax, [mouse_buttons]
+    call print_hex32
+    mov esi, msg_mouse_ack
+    call api_print_string
+    movzx eax, byte [mouse_last_ack]
+    call print_hex32
+    jmp shell_loop
+
+history_push_if_nonempty:
+    pusha
+    mov esi, cmd_buffer
+.skip:
+    cmp byte [esi], ' '
+    jne .chk
+    inc esi
+    jmp .skip
+.chk:
+    cmp byte [esi], 0
+    je .done
+    mov ebx, [hist_head]
+    and ebx, (hist_max-1)
+    mov edi, history_ring
+    imul eax, ebx, hist_line_len
+    add edi, eax
+    mov ecx, hist_line_len
+    xor eax, eax
+    rep stosb
+    mov ebx, [hist_head]
+    and ebx, (hist_max-1)
+    mov edi, history_ring
+    imul eax, ebx, hist_line_len
+    add edi, eax
+    mov ecx, hist_line_len-1
+.cpy:
+    lodsb
+    cmp al, 0
+    je .term
+    stosb
+    loop .cpy
+.term:
+    mov byte [edi], 0
+    inc dword [hist_head]
+    cmp dword [hist_count], hist_max
+    jae .done
+    inc dword [hist_count]
+.done:
+    popa
+    ret
+
+autocomplete_builtin:
+    ; IN: ESI=prefix(cmd_buffer) OUT EAX=1 if completed
+    pusha
+    mov eax, 0
+    mov edi, cmd_dir
+    call prefix_match
+    cmp eax, 1
+    je .use_dir
+    mov edi, cmd_help
+    call prefix_match
+    cmp eax, 1
+    je .use_help
+    mov edi, cmd_history
+    call prefix_match
+    cmp eax, 1
+    je .use_history
+    mov edi, cmd_roadmap
+    call prefix_match
+    cmp eax, 1
+    je .use_roadmap
+    mov edi, cmd_pciscan
+    call prefix_match
+    cmp eax, 1
+    je .use_pciscan
+    jmp .done
+.use_dir:
+    mov esi, cmd_dir
+    jmp .copy
+.use_help:
+    mov esi, cmd_help
+    jmp .copy
+.use_history:
+    mov esi, cmd_history
+    jmp .copy
+.use_roadmap:
+    mov esi, cmd_roadmap
+    jmp .copy
+.use_pciscan:
+    mov esi, cmd_pciscan
+.copy:
+    mov edi, cmd_buffer
+    call strcpy
+    mov eax, 1
+.done:
+    mov [esp+28], eax
+    popa
+    ret
+
+prefix_match:
+    ; IN: ESI=prefix, EDI=candidate ; OUT EAX=1 if prefix matches candidate
+    push esi
+    push edi
+.l:
+    mov al, [esi]
+    cmp al, 0
+    je .yes
+    cmp al, [edi]
+    jne .no
+    inc esi
+    inc edi
+    jmp .l
+.yes:
+    mov eax, 1
+    jmp .ret
+.no:
+    xor eax, eax
+.ret:
+    pop edi
+    pop esi
+    ret
+
+do_buffer_panic:
+    mov dword [panic_active], 1
+    mov dword [panic_vector], 0xBEEF
+    mov dword [panic_errcode], 0xC0DE0001
+    mov esi, msg_buf_guard_bad
     call api_print_string
     jmp shell_loop
 
@@ -3739,6 +4258,32 @@ print_dec_u8:
     add dl, '0'
     mov al, dl
     call print_char
+    popa
+    ret
+
+print_dec32:
+    pusha
+    mov edi, dec_buffer+11
+    mov byte [edi], 0
+    cmp eax, 0
+    jne .loop
+    dec edi
+    mov byte [edi], '0'
+    jmp .out
+.loop:
+    xor edx, edx
+    mov ebx, 10
+    div ebx
+    add dl, '0'
+    dec edi
+    mov [edi], dl
+    cmp eax, 0
+    jne .loop
+.out:
+    mov esi, edi
+    call api_print_string
+    mov esi, msg_num_nl
+    call api_print_string
     popa
     ret
 task_demo_entry:
