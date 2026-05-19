@@ -91,6 +91,7 @@ cmd_kill      db "kill",0
 cmd_priority  db "priority",0
 cmd_preempt   db "preempt",0
 cmd_cdinfo    db "cdinfo",0
+cmd_lastpanic db "lastpanic",0
 
 ; Comandos de Red (Subcomandos)
 net_sub_info      db "info",0
@@ -155,6 +156,7 @@ msg_help          db 0x0A, "Comandos disponibles:",0x0A, \
                 "syscall- Prueba int80",0x0A, \
                 "mktask - Crea task demo",0x0A, \
                 "exc    - Estado excepciones",0x0A, \
+                "lastpanic - Ultimo panic/log",0x0A, \
                 "block  - Bloquear task",0x0A, \
                 "wake   - Despertar task0",0x0A, \
                 "journal- Estado journal FS",0x0A, \
@@ -280,6 +282,12 @@ msg_mktask_ok     db 0x0A,"Task kernel registrada.",0
 msg_mktask_fail   db 0x0A,"No se pudo registrar task.",0
 msg_exc_count     db 0x0A,"Exceptions: ",0
 msg_exc_last      db 0x0A,"Last exception: ",0
+msg_panic_active  db 0x0A,"panic_active: ",0
+msg_panic_vector  db 0x0A,"panic_vector: ",0
+msg_panic_err     db 0x0A,"panic_errcode: ",0
+msg_panic_eip     db 0x0A,"panic_eip: ",0
+msg_panic_logcnt  db 0x0A,"log_count: ",0
+msg_panic_lasthdr db 0x0A,"Ultimos eventos (max 8):",0
 msg_block_ok      db 0x0A,"Protegido: la shell principal no se bloquea.",0
 msg_wake_ok       db 0x0A,"Task 0 despertada.",0
 msg_journal_seq   db 0x0A,"FS journal seq: ",0
@@ -684,6 +692,10 @@ execute:
     call strcmp
     cmp eax, 0
     je do_exc
+    mov edi, cmd_lastpanic
+    call strcmp
+    cmp eax, 0
+    je do_lastpanic
 
     mov edi, cmd_block
     call strcmp
@@ -2774,6 +2786,46 @@ do_exc:
     call api_print_string
     mov eax, [last_exception]
     call print_hex32
+    jmp shell_loop
+
+do_lastpanic:
+    mov esi, msg_panic_active
+    call api_print_string
+    mov eax, [panic_active]
+    call print_hex32
+    mov esi, msg_panic_vector
+    call api_print_string
+    mov eax, [panic_vector]
+    call print_hex32
+    mov esi, msg_panic_err
+    call api_print_string
+    mov eax, [panic_errcode]
+    call print_hex32
+    mov esi, msg_panic_eip
+    call api_print_string
+    mov eax, [panic_eip]
+    call print_hex32
+    mov esi, msg_panic_logcnt
+    call api_print_string
+    mov eax, [log_count]
+    call print_hex32
+    mov esi, msg_panic_lasthdr
+    call api_print_string
+    mov ebx, [log_head]
+    mov ecx, 8
+.lp:
+    cmp ecx, 0
+    je .done
+    cmp ebx, 0
+    je .done
+    dec ebx
+    mov edx, ebx
+    and edx, 127
+    mov eax, [log_ring + edx*4]
+    call print_hex32
+    dec ecx
+    jmp .lp
+.done:
     jmp shell_loop
 
 do_block:

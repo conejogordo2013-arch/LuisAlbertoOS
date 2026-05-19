@@ -16,6 +16,15 @@ irq1_keys dd 0
 exception_count dd 0
 last_exception  dd 0
 syscall_count   dd 0
+panic_active    dd 0
+panic_eip       dd 0
+panic_errcode   dd 0
+panic_vector    dd 0
+panic_magic     dd 0
+log_head        dd 0
+log_count       dd 0
+log_ring        times 128 dd 0
+log_event_tmp   dd 0
 
 %macro SET_IDT 2
     mov eax, %1
@@ -110,25 +119,67 @@ interrupts_enable:
     sti
     ret
 
+interrupt_log_push:
+    ; EAX = 32-bit event
+    pusha
+    mov ebx, [log_head]
+    and ebx, 127
+    mov [log_ring + ebx*4], eax
+    inc dword [log_head]
+    cmp dword [log_count], 128
+    jae .done
+    inc dword [log_count]
+.done:
+    popa
+    ret
 
 %macro EXC_STUB_NOERR 2
 %1:
-    pusha
-    inc dword [exception_count]
-    mov dword [last_exception], %2
-    popa
-    iretd
+    push dword 0
+    push dword %2
+    jmp isr_exception_common
 %endmacro
 
 %macro EXC_STUB_ERR 2
 %1:
-    pusha
-    inc dword [exception_count]
-    mov dword [last_exception], %2
-    popa
-    add esp, 4              ; CPU-pushed error code
-    iretd
+    push dword %2
+    jmp isr_exception_common
 %endmacro
+
+isr_exception_common:
+    pusha
+    mov eax, [esp+36]
+    mov [last_exception], eax
+    inc dword [exception_count]
+    mov eax, [esp+32]
+    mov [panic_errcode], eax
+    mov eax, [esp+44]
+    mov [panic_eip], eax
+    mov eax, [esp+36]
+    mov [panic_vector], eax
+    mov dword [panic_magic], 0x50414E43 ; "PANC"
+    mov dword [panic_active], 1
+    mov eax, [panic_vector]
+    shl eax, 24
+    or eax, [panic_errcode]
+    call interrupt_log_push
+    call api_clear_screen
+    mov esi, panic_msg_1
+    call api_print_string
+    mov eax, [panic_vector]
+    call print_hex32
+    mov esi, panic_msg_2
+    call api_print_string
+    mov eax, [panic_errcode]
+    call print_hex32
+    mov esi, panic_msg_3
+    call api_print_string
+    mov eax, [panic_eip]
+    call print_hex32
+    cli
+.halt:
+    hlt
+    jmp .halt
 
 EXC_STUB_NOERR isr_exc0, 0
 EXC_STUB_NOERR isr_exc1, 1
@@ -155,6 +206,8 @@ isr_irq0:
     pusha
     inc dword [irq_ticks]
     inc dword [scheduler_ticks]
+    mov eax, 0x10000020
+    call interrupt_log_push
     call scheduler_on_tick
     ; EOI
     mov al,0x20
@@ -166,6 +219,8 @@ isr_irq1:
     pusha
     in al,0x60
     inc dword [irq1_keys]
+    mov eax, 0x10000021
+    call interrupt_log_push
     mov al,0x20
     out 0x20,al
     popa
@@ -174,6 +229,8 @@ isr_irq1:
 isr_syscall80:
     pusha
     inc dword [syscall_count]
+    mov eax, 0x20000080
+    call interrupt_log_push
     ; EAX=syscall
     cmp eax,1
     je .sys_puts
@@ -239,5 +296,9 @@ isr_syscall80:
 .done:
     popa
     iretd
+
+panic_msg_1 db 0x0A,"*** KERNEL PANIC *** Excepcion: ",0
+panic_msg_2 db 0x0A,"Codigo error: ",0
+panic_msg_3 db 0x0A,"EIP: ",0
 
 %endif
