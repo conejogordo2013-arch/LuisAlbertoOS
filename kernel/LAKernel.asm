@@ -59,6 +59,7 @@ gdt_descriptor:
 %include "kernel/LAApi.asm"
 %include "kernel/LAApiApplications.asm"
 %include "drivers/keyboard.lasys"
+%include "drivers/mouse_ps2.lasys"
 %include "kernel/LACommand.asm"
 %include "drivers/ata.lasys"
 %include "kernel/fs.lasys"
@@ -69,6 +70,7 @@ gdt_descriptor:
 %include "drivers/sb16.lasys"
 %include "drivers/e1000.lasys"
 %include "drivers/storage_extra.lasys"
+%include "kernel/pci.lasys"
 
 %include "kernel/interrupts.lasys"
 

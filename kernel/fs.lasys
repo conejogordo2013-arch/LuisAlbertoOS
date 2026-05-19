@@ -50,6 +50,7 @@ fs_init_ata:
     ret
 
 fs_storage_mode dd FS_MODE_NONE
+fs_cwd_id dd 0
 fs_journal_seq dd 0
 fs_create_flag db 0
 fs_write_name_ptr dd 0
@@ -59,6 +60,7 @@ fs_block_table times 16*FS_FILE_SECTORS dd 0
 
 fs_init_ram:
     mov dword [fs_storage_mode], FS_MODE_RAM
+    mov dword [fs_cwd_id], 0
     ; Clear directory sector.
     mov edi, DIR_BUFFER
     mov ecx, 512/4
@@ -115,6 +117,35 @@ fs_save_dir:
 .done:
     ret
 
+fs_sync:
+    ; Fuerza persistencia del directorio y archivos al backend activo.
+    cmp dword [fs_storage_mode], FS_MODE_ATA
+    jne .ram_only
+    call fs_rebuild_block_table
+    call fs_save_dir
+    mov eax, 1
+    ret
+.ram_only:
+    ; En RAM no hay medio persistente físico.
+    xor eax, eax
+    ret
+
+fs_reload_dir:
+    ; Recarga el directorio desde backend persistente.
+    cmp dword [fs_storage_mode], FS_MODE_ATA
+    jne .fail
+    mov eax, DIR_LBA
+    mov ebx, DIR_BUFFER
+    call floppy_read_sector
+    cmp eax, 1
+    jne .fail
+    call fs_rebuild_block_table
+    mov eax, 1
+    ret
+.fail:
+    xor eax, eax
+    ret
+
 fs_create_file:
     mov [fs_create_flag], al
     mov edi, DIR_BUFFER
@@ -154,7 +185,8 @@ fs_create_file:
     mov dword [edi+20], 0 ; tamaño
     mov al, [fs_create_flag]
     mov byte [edi+24], al ; flag
-    mov byte [edi+25], 0 ; parent(root)
+    mov al, [fs_cwd_id]
+    mov byte [edi+25], al ; parent actual
     call fs_clear_entry_data
     call fs_rebuild_block_table
     call fs_save_dir
@@ -173,7 +205,8 @@ fs_create_file:
     mov dword [edi+20], 0
     mov al, [fs_create_flag]
     mov byte [edi+24], al
-    mov byte [edi+25], 0
+    mov al, [fs_cwd_id]
+    mov byte [edi+25], al
     call fs_clear_entry_data
     call fs_rebuild_block_table
     call fs_save_dir
@@ -408,8 +441,33 @@ fs_rebuild_block_table:
     ret
 
 fs_change_dir:
+    ; maneja ".." usando parent real
+    mov al, [esi]
+    cmp al, '.'
+    jne .scan
+    cmp byte [esi+1], '.'
+    jne .scan
+    cmp byte [esi+2], 0
+    jne .scan
+    cmp dword [fs_cwd_id], 0
+    je .ok_root
+    movzx eax, byte [fs_cwd_id]
+    dec eax
+    mov ebx, DIR_ENTRY_SIZE
+    imul eax, ebx
+    mov edi, DIR_BUFFER
+    add edi, eax
+    movzx eax, byte [edi+25]
+    mov [fs_cwd_id], eax
+    mov eax, 1
+    ret
+.ok_root:
+    mov eax, 1
+    ret
+.scan:
     mov edi, DIR_BUFFER
     mov ecx,16
+    xor ebx, ebx
 .find_dir:
     cmp byte [edi],0
     je .not_found
@@ -431,7 +489,14 @@ fs_change_dir:
     pop edi
     ; validar flag
     cmp byte [edi+24], FLAG_DIR
-    jne .not_found
+    jne .next_entry
+    mov al, [edi+25]
+    movzx eax, al
+    cmp eax, [fs_cwd_id]
+    jne .next_entry
+    mov eax, ebx
+    inc eax
+    mov [fs_cwd_id], eax
     ; actualizar current_path
     mov esi, [arg_ptr]      
     cmp byte [esi],'.'
@@ -475,10 +540,13 @@ fs_change_dir:
     jnz .compare_dir
     pop esi
     pop edi
+ .next_entry:
+    inc ebx
     add edi, DIR_ENTRY_SIZE
     dec ecx
     jnz .find_dir
 .not_found:
+    xor eax, eax
     ret
 
 
