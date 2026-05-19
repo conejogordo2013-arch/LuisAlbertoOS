@@ -23,6 +23,15 @@ heap_end             dd KHEAP_START + KHEAP_SIZE
 paging_enabled       dd 0
 page_directory_phys  dd PAGE_DIR_BASE
 last_frame_alloc    dd 0
+last_frame_freed    dd 0
+frame_alloc_count   dd 0
+frame_free_count    dd 0
+last_kmalloc_addr   dd 0
+last_kmalloc_size   dd 0
+kmalloc_count       dd 0
+kfree_count         dd 0
+last_kfree_addr     dd 0
+memory_error_addr   dd 0
 
 mem_init:
     pusha
@@ -39,6 +48,15 @@ mem_init:
     mov dword [mem_used_bytes], RESERVED_FRAMES * PAGE_SIZE
     mov dword [heap_ptr], KHEAP_START
     mov dword [last_frame_alloc], 0
+    mov dword [last_frame_freed], 0
+    mov dword [frame_alloc_count], 0
+    mov dword [frame_free_count], 0
+    mov dword [last_kmalloc_addr], 0
+    mov dword [last_kmalloc_size], 0
+    mov dword [kmalloc_count], 0
+    mov dword [kfree_count], 0
+    mov dword [last_kfree_addr], 0
+    mov dword [memory_error_addr], 0
     popa
     ret
 
@@ -68,6 +86,7 @@ frame_alloc:
     imul eax, PAGE_SIZE
     add dword [mem_used_bytes], PAGE_SIZE
     mov [last_frame_alloc], eax
+    inc dword [frame_alloc_count]
     mov [esp+28], eax
     popa
     ret
@@ -78,6 +97,7 @@ frame_alloc:
     inc ebx
     jmp .find_byte
 .no_frame:
+    mov dword [memory_error_addr], 0xFFFFFFFF
     mov dword [esp+28], 0
     popa
     ret
@@ -88,16 +108,23 @@ frame_free:
     mov ebx, eax
     shr ebx, 12
     cmp ebx, TOTAL_FRAMES
-    jae .done
+    jae .invalid
     mov edx, ebx
     shr edx, 3
     and ebx, 7
     mov al, [FRAME_BITMAP+edx]
     bt eax, ebx
-    jnc .done
+    jnc .invalid
     btc eax, ebx
     mov [FRAME_BITMAP+edx], al
+    mov eax, [esp+28]
+    mov [last_frame_freed], eax
+    inc dword [frame_free_count]
     sub dword [mem_used_bytes], PAGE_SIZE
+    jmp .done
+.invalid:
+    mov eax, [esp+28]
+    mov [memory_error_addr], eax
 .done:
     popa
     ret
@@ -146,13 +173,19 @@ kmalloc:
     cmp edx, [heap_end]
     ja .fail
     mov [heap_ptr], edx
+    mov [last_kmalloc_addr], eax
+    mov [last_kmalloc_size], ecx
+    inc dword [kmalloc_count]
     ret
 .fail:
+    mov [memory_error_addr], edx
     xor eax, eax
     ret
 
 kfree:
-    ; bump allocator: free no-op intencional
+    ; bump allocator: free no-op intencional, tracked for diagnostics
+    mov [last_kfree_addr], eax
+    inc dword [kfree_count]
     ret
 
 

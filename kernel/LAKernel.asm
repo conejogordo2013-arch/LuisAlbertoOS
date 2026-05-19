@@ -1,6 +1,7 @@
 [BITS 16]
 [ORG 0x10000]
 
+kernel_start:
 kernel_entry:
     cli                     ; Disable interrupts (Crucial for PM switch)
     mov ax, cs              ; Kernel is loaded at 1000:0000; use CS for 16-bit data refs
@@ -90,3 +91,5 @@ user_entry_stub:
     jmp .user_loop
 
 user_msg db 0x0A, "[RING3] User stub activo via int80.",0
+
+kernel_end:
