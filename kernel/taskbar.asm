@@ -8,21 +8,20 @@ taskbar_init:
     ret
 
 taskbar_handle_mouse:
-    ; eax=x ebx=y edx=edge click
+    ; eax=x ebx=y edx=click_edge
     cmp edx, 1
     jne .ret
     cmp ebx, 188
-    jb .ret
+    jb .close
     cmp eax, 4
     jb .close
     cmp eax, 52
     ja .close
-    xor dword [tb_start_open], 1
+    xor dword [tb_start_open],1
     ret
 .close:
     mov dword [tb_start_open], 0
-.ret:
-    ret
+.ret: ret
 
 taskbar_draw:
     mov eax, 0
