@@ -3454,7 +3454,7 @@ do_color:
 
 do_tui:
     pusha
-    call vga_desktop_view
+    call desktop_launch
     popa
     call api_clear_screen
     jmp shell_loop
