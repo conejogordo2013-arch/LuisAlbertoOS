@@ -66,6 +66,7 @@ gdt_descriptor:
 %include "kernel/keyboard.asm"
 %include "kernel/renderer.asm"
 %include "kernel/gui_api.asm"
+%include "kernel/elf_loader.asm"
 %include "kernel/applications.asm"
 %include "kernel/taskbar.asm"
 %include "kernel/start_menu.asm"
