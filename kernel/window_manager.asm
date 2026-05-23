@@ -183,4 +183,98 @@ wm_draw:
 .d: popad
     ret
 
+wm_handle_mouse:
+    ; eax=mouse_x ebx=mouse_y ecx=left_down(0/1)
+    pushad
+    cmp ecx, 1
+    jne .mouse_up
+
+    mov edx, [wm_drag_id]
+    test edx, edx
+    jnz .drag_move
+
+    ; buscar ventana top-most bajo el cursor (barra de título: alto 12)
+    mov esi, [wm_count]
+    dec esi
+.scan:
+    cmp esi, -1
+    je .done
+    mov edx, [wm_flags + esi*4]
+    test edx, WIN_FLAG_VISIBLE
+    jz .next
+    test edx, WIN_FLAG_MINIMIZED
+    jnz .next
+
+    mov edx, [wm_x + esi*4]
+    cmp eax, edx
+    jl .next
+    mov edi, [wm_w + esi*4]
+    add edi, edx
+    cmp eax, edi
+    jge .next
+
+    mov edx, [wm_y + esi*4]
+    cmp ebx, edx
+    jl .next
+    mov edi, edx
+    add edi, 12
+    cmp ebx, edi
+    jge .next
+
+    mov edx, [wm_id + esi*4]
+    mov [wm_drag_id], edx
+    mov [wm_focus_id], edx
+    mov edi, [wm_x + esi*4]
+    mov edx, eax
+    sub edx, edi
+    mov [wm_drag_dx], edx
+    mov edi, [wm_y + esi*4]
+    mov edx, ebx
+    sub edx, edi
+    mov [wm_drag_dy], edx
+    jmp .done
+.next:
+    dec esi
+    jmp .scan
+
+.drag_move:
+    mov eax, [wm_drag_id]
+    call wm_find_index
+    cmp eax, -1
+    je .done
+    mov esi, eax
+    mov edx, [esp+28]            ; original mouse_x
+    sub edx, [wm_drag_dx]
+    cmp edx, 0
+    jge .x_ok0
+    xor edx, edx
+.x_ok0:
+    mov edi, 320
+    sub edi, [wm_w + esi*4]
+    cmp edx, edi
+    jle .x_ok1
+    mov edx, edi
+.x_ok1:
+    mov [wm_x + esi*4], edx
+    mov edx, [esp+16]            ; original mouse_y
+    sub edx, [wm_drag_dy]
+    cmp edx, 0
+    jge .y_ok0
+    xor edx, edx
+.y_ok0:
+    mov edi, 200
+    sub edi, [wm_h + esi*4]
+    cmp edx, edi
+    jle .y_ok1
+    mov edx, edi
+.y_ok1:
+    mov [wm_y + esi*4], edx
+    jmp .done
+
+.mouse_up:
+    mov dword [wm_drag_id], 0
+.done:
+    popad
+    ret
+
 %endif

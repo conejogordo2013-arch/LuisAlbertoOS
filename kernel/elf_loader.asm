@@ -21,6 +21,7 @@ elf_load_image:
     movzx ecx, word [esi+44]     ; e_phnum
     cmp ecx, 0
     je .done
+    mov ebp, esi                 ; base ELF image
     mov ebx, [esi+28]            ; e_phoff
     add ebx, esi
 .ph_loop:
@@ -29,15 +30,23 @@ elf_load_image:
     push ecx
     mov edi, [ebx+8]             ; p_vaddr
     mov edx, [ebx+4]             ; p_offset
-    add edx, esi
+    add edx, ebp
+    mov esi, edx
     mov ecx, [ebx+16]            ; p_filesz
     rep movsb
+    ; zero-fill bss (memsz - filesz)
+    mov ecx, [ebx+20]            ; p_memsz
+    sub ecx, [ebx+16]
+    jle .seg_done
+    xor eax, eax
+    rep stosb
+.seg_done:
     pop ecx
 .next:
     add ebx, 32
     dec ecx
     jnz .ph_loop
-    mov eax, [esi+24]            ; e_entry
+    mov eax, [ebp+24]            ; e_entry
     mov [elf_load_result], eax
 .done:
     popad
@@ -51,7 +60,11 @@ elf_run_image:
     test eax, eax
     jz .exit
     mov esp, ELF_STACK_TOP
+    push dword 0
     call eax
+    ; si la app retorna sin exit explícito, cerrar tarea actual
+    mov eax, 6
+    int 0x80
 .exit:
     popad
     ret
