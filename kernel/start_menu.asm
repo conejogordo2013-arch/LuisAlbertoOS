@@ -20,6 +20,8 @@ start_menu_handle_mouse:
     jbe .app0
     cmp ebx,150
     jbe .app1
+    cmp ebx,162
+    jbe .app2
     cmp ebx,174
     jbe .reboot
     jmp .shutdown
@@ -28,6 +30,10 @@ start_menu_handle_mouse:
     mov dword [tb_start_open],0
     ret
 .app1: mov eax,1
+    call applications_launch
+    mov dword [tb_start_open],0
+    ret
+.app2: mov eax,2
     call applications_launch
     mov dword [tb_start_open],0
     ret
