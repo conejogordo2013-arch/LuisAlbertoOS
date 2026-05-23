@@ -22,12 +22,14 @@ wm_h                times WM_MAX_WINDOWS dd 0
 wm_z                times WM_MAX_WINDOWS dd 0
 wm_flags            times WM_MAX_WINDOWS dd 0
 wm_title            times WM_MAX_WINDOWS*WM_TITLE_MAX db 0
+wm_editor_cursor_x  dd 0
 
 wm_init:
     mov dword [wm_next_id], 1
     mov dword [wm_count], 0
     mov dword [wm_focus_id], 0
     mov dword [wm_drag_id], 0
+    mov dword [wm_editor_cursor_x], 0
     ret
 
 window_create:
@@ -190,6 +192,7 @@ wm_draw:
     mov edx,7
     mov esi,12
     call graphics_fill_rect
+    call wm_draw_content
 .n: inc edi
     jmp .l2
 .d: popad
@@ -300,4 +303,146 @@ wm_handle_mouse:
     popad
     ret
 
+wm_draw_content:
+    ; usa EDI=index ventana actual
+    pushad
+    mov eax,[wm_x+edi*4]
+    add eax,3
+    mov ebx,[wm_y+edi*4]
+    add ebx,16
+    mov ecx,[wm_w+edi*4]
+    sub ecx,6
+    mov edx,[wm_h+edi*4]
+    sub edx,19
+    cmp ecx,8
+    jbe .out
+    cmp edx,8
+    jbe .out
+
+    mov esi,9
+    call graphics_fill_rect
+
+    ; selector por primera letra del título
+    mov eax, edi
+    imul eax, eax, WM_TITLE_MAX
+    add eax, wm_title
+    mov al, [eax]
+    cmp al, 'T'
+    je .textedit
+    cmp al, 'F'
+    je .files
+    cmp al, 'N'
+    je .notes
+    cmp al, 'E'
+    je .explr
+    jmp .driver_mgr
+
+.textedit:
+    mov eax,[wm_x+edi*4]
+    add eax,6
+    mov ebx,[wm_y+edi*4]
+    add ebx,20
+    mov ecx,[wm_w+edi*4]
+    sub ecx,12
+    mov edx,[wm_h+edi*4]
+    sub edx,26
+    mov esi,15
+    call graphics_fill_rect
+    mov eax,[wm_editor_cursor_x]
+    inc eax
+    and eax,31
+    mov [wm_editor_cursor_x],eax
+    mov eax,[wm_x+edi*4]
+    add eax,12
+    add eax,[wm_editor_cursor_x]
+    mov ebx,[wm_y+edi*4]
+    add ebx,24
+    mov ecx,2
+    mov edx,10
+    mov esi,0
+    call graphics_fill_rect
+    jmp .out
+.files:
+    mov eax,[wm_x+edi*4]
+    add eax,8
+    mov ebx,[wm_y+edi*4]
+    add ebx,22
+    mov ecx,[wm_w+edi*4]
+    sub ecx,16
+    mov edx,8
+    mov esi,1
+    call graphics_fill_rect
+    add ebx,14
+    mov esi,3
+    call graphics_fill_rect
+    add ebx,14
+    mov esi,11
+    call graphics_fill_rect
+    jmp .out
+.notes:
+    mov eax,[wm_x+edi*4]
+    add eax,8
+    mov ebx,[wm_y+edi*4]
+    add ebx,22
+    mov ecx,[wm_w+edi*4]
+    sub ecx,20
+    mov edx,6
+    mov esi,14
+    call graphics_fill_rect
+    add ebx,10
+    call graphics_fill_rect
+    add ebx,10
+    call graphics_fill_rect
+    jmp .out
+.explr:
+    mov eax,[wm_x+edi*4]
+    add eax,10
+    mov ebx,[wm_y+edi*4]
+    add ebx,24
+    mov ecx,10
+    mov edx,10
+    mov esi,12
+    call graphics_fill_rect
+    add eax,16
+    mov ecx,16
+    mov edx,18
+    mov esi,10
+    call graphics_fill_rect
+    add eax,22
+    mov ecx,20
+    mov edx,26
+    mov esi,2
+    call graphics_fill_rect
+    jmp .out
+.driver_mgr:
+    mov eax,[wm_x+edi*4]
+    add eax,8
+    mov ebx,[wm_y+edi*4]
+    add ebx,22
+    mov ecx,[wm_w+edi*4]
+    sub ecx,16
+    mov edx,8
+    cmp dword [fs_driver_available],0
+    je .d0
+    mov esi,2
+    jmp .d0d
+.d0: mov esi,4
+.d0d: call graphics_fill_rect
+    add ebx,12
+    cmp dword [net_driver_available],0
+    je .d1
+    mov esi,2
+    jmp .d1d
+.d1: mov esi,4
+.d1d: call graphics_fill_rect
+    add ebx,12
+    cmp dword [audio_driver_available],0
+    je .d2
+    mov esi,2
+    jmp .d2d
+.d2: mov esi,4
+.d2d: call graphics_fill_rect
+.out:
+    popad
+    ret
 %endif

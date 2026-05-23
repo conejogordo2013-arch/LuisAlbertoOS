@@ -84,6 +84,8 @@ desktop_launch:
     cmp al, 0x01
     je .exit
 .w: hlt
+    cmp dword [desktop_should_exit], 1
+    je .exit
     jmp .loop
 .exit:
     mov esi, vga_regs_3h
