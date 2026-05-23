@@ -113,6 +113,8 @@ mouse_init:
     jne .fail
     mov dword [mouse_ready], 1
     mov dword [mouse_byte_index], 0
+    mov dword [mouse_x], 160
+    mov dword [mouse_y], 100
     mov dword [mouse_buttons], 0
     mov dword [mouse_buttons_prev], 0
     mov dword [mouse_buttons_edge], 0
@@ -120,6 +122,8 @@ mouse_init:
     ret
 .fail:
     mov dword [mouse_ready], 0
+    mov dword [mouse_x], 160
+    mov dword [mouse_y], 100
     ret
 
 mouse_irq_handle_byte:
