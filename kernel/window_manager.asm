@@ -117,6 +117,9 @@ window_destroy:
     jmp .sh
 .dec:
     dec dword [wm_count]
+    cmp dword [wm_count], 0
+    jne .out
+    mov dword [wm_focus_id], 0
 .out: popad
     ret
 
@@ -178,6 +181,15 @@ wm_draw:
     mov edx,12
     mov esi,4
     call graphics_fill_rect
+    mov eax,[wm_x+edi*4]
+    add eax,[wm_w+edi*4]
+    sub eax,9
+    mov ebx,[wm_y+edi*4]
+    add ebx,2
+    mov ecx,7
+    mov edx,7
+    mov esi,12
+    call graphics_fill_rect
 .n: inc edi
     jmp .l2
 .d: popad
@@ -221,6 +233,17 @@ wm_handle_mouse:
     cmp ebx, edi
     jge .next
 
+    mov edi, [wm_w + esi*4]
+    add edi, [wm_x + esi*4]
+    sub edi, 10
+    cmp eax, edi
+    jl .start_drag
+    mov eax, [wm_id + esi*4]
+    call window_destroy
+    mov dword [wm_drag_id], 0
+    jmp .done
+
+.start_drag:
     mov edx, [wm_id + esi*4]
     mov [wm_drag_id], edx
     mov [wm_focus_id], edx

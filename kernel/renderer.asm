@@ -54,6 +54,18 @@ renderer_draw_desktop_bg:
     mov edx, 14
     mov esi, 10
     call graphics_fill_rect
+    mov eax, 46
+    mov ebx, 12
+    mov ecx, 14
+    mov edx, 14
+    mov esi, 3
+    call graphics_fill_rect
+    mov eax, 64
+    mov ebx, 12
+    mov ecx, 14
+    mov edx, 14
+    mov esi, 12
+    call graphics_fill_rect
     ret
 
 %endif
