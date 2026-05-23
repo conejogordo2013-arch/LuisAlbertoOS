@@ -1,7 +1,7 @@
 %ifndef LA_START_MENU_ASM
 %define LA_START_MENU_ASM
 
-sm_newfile_name db 'n.txt',0
+sm_newfile_name db 'n',0
 
 start_menu_handle_mouse:
     ; eax=x ebx=y edx=click

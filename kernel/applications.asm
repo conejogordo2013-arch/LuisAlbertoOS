@@ -5,10 +5,10 @@ APP_HELLO_ELF_LBA equ 136
 APP_HELLO_ELF_SECTORS equ 4
 
 app_count dd 4
-app0_name db 'Explr',0
-app1_name db 'Task',0
-app2_name db 'hello',0
-app3_name db 'TxtEd',0
+app0_name db 'E',0
+app1_name db 'T',0
+app2_name db 'H',0
+app3_name db 'X',0
 
 applications_init:
     ret

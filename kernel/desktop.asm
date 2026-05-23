@@ -3,8 +3,6 @@
 
 desktop_prev_left dd 0
 desktop_click_edge dd 0
-desktop_wallpaper_inited dd 0
-DESKTOP_WALLPAPER_BUF equ 0x00300000
 
 desktop_launch:
     ; Garantizar IRQs activas al entrar al entorno gráfico.
@@ -65,6 +63,31 @@ desktop_launch:
     mov ebx, [mouse_y]
     mov edx, [desktop_click_edge]
     call start_menu_handle_mouse
+    ; iconos escritorio (click izquierdo)
+    cmp dword [desktop_click_edge],1
+    jne .draw
+    mov eax,[mouse_x]
+    mov ebx,[mouse_y]
+    cmp ebx,12
+    jb .draw
+    cmp ebx,26
+    ja .draw
+    cmp eax,10
+    jbe .i0
+    cmp eax,28
+    jbe .i1
+    cmp eax,46
+    jbe .i2
+    jmp .draw
+.i0: mov eax,0
+    call applications_launch
+    jmp .draw
+.i1: mov eax,1
+    call applications_launch
+    jmp .draw
+.i2: mov eax,3
+    call applications_launch
+.draw:
 
     mov al, 1
     call graphics_clear_backbuffer
@@ -92,42 +115,4 @@ desktop_launch:
 
 desktop_title db 'Desktop',0
 
-desktop_wallpaper_init:
-    cmp dword [desktop_wallpaper_inited], 1
-    je .done
-    mov edi, DESKTOP_WALLPAPER_BUF
-    xor ebx, ebx                    ; y
-.row:
-    cmp ebx, 188
-    jge .set
-    xor eax, eax                    ; x
-.col:
-    cmp eax, 320
-    jge .next_row
-    mov edx, eax
-    shr edx, 4
-    mov ecx, ebx
-    shr ecx, 4
-    xor edx, ecx
-    and edx, 1
-    cmp edx, 0
-    jne .c2
-    mov dl, 1
-    jmp .st
-.c2:
-    mov dl, 3
-.st:
-    mov [edi], dl
-    inc edi
-    inc eax
-    jmp .col
-.next_row:
-    inc ebx
-    jmp .row
-.set:
-    mov esi, DESKTOP_WALLPAPER_BUF
-    call renderer_set_wallpaper_raw
-    mov dword [desktop_wallpaper_inited], 1
-.done:
-    ret
 %endif
