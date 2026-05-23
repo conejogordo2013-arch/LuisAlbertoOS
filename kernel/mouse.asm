@@ -10,7 +10,18 @@ mouse_irq_handler:
     ret
 
 mouse_update:
-    ; state already updated in IRQ path
+    ; Fallback robusto: drena bytes pendientes del controlador PS/2 por polling
+    ; en caso de que la IRQ12 no llegue de forma consistente en cierto emulador.
+.poll:
+    in al, 0x64
+    test al, 1
+    jz .done
+    test al, 0x20
+    jz .done
+    in al, 0x60
+    call mouse_irq_handle_byte
+    jmp .poll
+.done:
     ret
 
 mouse_cursor_draw:
@@ -24,9 +35,30 @@ mouse_cursor_draw:
     jl .ret
     cmp ebx, 199
     jg .ret
+    ; cursor tipo cruz para mejor visibilidad
     imul edx, ebx, 320
     add edx, eax
     mov byte [GRAPH_BACKBUF + edx], 15
+    cmp eax, 1
+    jl .ret
+    cmp eax, 318
+    jg .ret
+    cmp ebx, 1
+    jl .ret
+    cmp ebx, 198
+    jg .ret
+    mov edi, edx
+    dec edi
+    mov byte [GRAPH_BACKBUF + edi], 15
+    mov edi, edx
+    inc edi
+    mov byte [GRAPH_BACKBUF + edi], 15
+    mov edi, edx
+    sub edi, 320
+    mov byte [GRAPH_BACKBUF + edi], 15
+    mov edi, edx
+    add edi, 320
+    mov byte [GRAPH_BACKBUF + edi], 15
 .ret:
     ret
 
