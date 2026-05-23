@@ -14,6 +14,7 @@ desktop_launch:
     call keyboard_init
     call mouse_init_gui
     call wm_init
+    call desktop_wallpaper_init
     call taskbar_init
     call applications_init
     mov esi, desktop_title

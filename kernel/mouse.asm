@@ -1,8 +1,14 @@
 %ifndef LA_DESKTOP_MOUSE_ASM
 %define LA_DESKTOP_MOUSE_ASM
 
+mouse_poll_idle_frames dd 0
+mouse_last_packets    dd 0
+
 mouse_init_gui:
     call mouse_init
+    mov dword [mouse_poll_idle_frames], 0
+    mov eax, [mouse_packets]
+    mov [mouse_last_packets], eax
     ret
 
 mouse_irq_handler:
