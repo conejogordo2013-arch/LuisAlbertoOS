@@ -61,6 +61,7 @@ gdt_descriptor:
 %include "drivers/keyboard.lasys"
 %include "drivers/mouse_ps2.lasys"
 %include "kernel/graphics.asm"
+%include "kernel/gui_text.asm"
 %include "kernel/event_queue.asm"
 %include "kernel/mouse.asm"
 %include "kernel/keyboard.asm"

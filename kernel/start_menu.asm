@@ -2,6 +2,15 @@
 %define LA_START_MENU_ASM
 
 sm_newfile_name db 'n.txt',0
+sm_l0 db 'EXPLR',0
+sm_l1 db 'TASK',0
+sm_l2 db 'HELLOELF',0
+sm_l3 db 'TXTEDIT',0
+sm_l4 db 'FILES',0
+sm_l5 db 'NOTES',0
+sm_l6 db 'NEWFILE',0
+sm_l7 db 'REBOOT',0
+sm_l8 db 'OFF',0
 
 start_menu_handle_mouse:
     ; eax=x ebx=y edx=click
@@ -84,6 +93,36 @@ start_menu_draw:
     mov edx, 92
     mov esi, 8
     call graphics_fill_rect
+    mov eax, 10
+    mov ebx, 122
+    mov esi, sm_l0
+    mov edi, 15
+    call gui_draw_text
+    mov ebx, 134
+    mov esi, sm_l1
+    call gui_draw_text
+    mov ebx, 146
+    mov esi, sm_l2
+    call gui_draw_text
+    mov ebx, 158
+    mov esi, sm_l3
+    call gui_draw_text
+    mov ebx, 170
+    mov esi, sm_l4
+    call gui_draw_text
+    mov ebx, 182
+    mov esi, sm_l5
+    call gui_draw_text
+    mov ebx, 194
+    mov esi, sm_l6
+    call gui_draw_text
+    mov eax, 86
+    mov ebx, 202
+    mov esi, sm_l7
+    call gui_draw_text
+    mov eax, 128
+    mov esi, sm_l8
+    call gui_draw_text
 .ret: ret
 
 start_menu_create_file:

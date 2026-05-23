@@ -3,6 +3,12 @@
 
 tb_start_open dd 0
 desktop_should_exit dd 0
+txt_start db 'START',0
+txt_cmd db 'CMD',0
+txt_net_on db 'NET:ON',0
+txt_net_off db 'NET:OFF',0
+txt_aud_on db 'AUD:ON',0
+txt_aud_off db 'AUD:OFF',0
 
 taskbar_init:
     mov dword [tb_start_open], 0
@@ -115,6 +121,38 @@ taskbar_draw:
     mov esi, 12
 .aud_draw:
     call graphics_fill_rect
+    mov eax, 20
+    mov ebx, 191
+    mov esi, txt_start
+    mov edi, 15
+    call gui_draw_text
+    mov eax, 6
+    mov ebx, 191
+    mov esi, txt_cmd
+    mov edi, 0
+    call gui_draw_text
+    cmp dword [net_driver_available],0
+    je .txt_net_off
+    mov esi, txt_net_on
+    jmp .txt_net_draw
+.txt_net_off:
+    mov esi, txt_net_off
+.txt_net_draw:
+    mov eax, 206
+    mov ebx, 191
+    mov edi, 15
+    call gui_draw_text
+    cmp dword [audio_driver_available],0
+    je .txt_aud_off
+    mov esi, txt_aud_on
+    jmp .txt_aud_draw
+.txt_aud_off:
+    mov esi, txt_aud_off
+.txt_aud_draw:
+    mov eax, 254
+    mov ebx, 191
+    mov edi, 15
+    call gui_draw_text
     ret
 
 %endif

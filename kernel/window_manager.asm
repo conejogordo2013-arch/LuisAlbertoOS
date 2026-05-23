@@ -184,6 +184,17 @@ wm_draw:
     mov esi,4
     call graphics_fill_rect
     mov eax,[wm_x+edi*4]
+    add eax,3
+    mov ebx,[wm_y+edi*4]
+    add ebx,2
+    push edi
+    mov esi, edi
+    imul esi, esi, WM_TITLE_MAX
+    add esi, wm_title
+    mov edi, 15
+    call gui_draw_text
+    pop edi
+    mov eax,[wm_x+edi*4]
     add eax,[wm_w+edi*4]
     sub eax,9
     mov ebx,[wm_y+edi*4]
@@ -348,6 +359,13 @@ wm_draw_content:
     sub edx,26
     mov esi,15
     call graphics_fill_rect
+    mov eax,[wm_x+edi*4]
+    add eax,8
+    mov ebx,[wm_y+edi*4]
+    add ebx,22
+    mov esi, wm_txt_editor
+    mov edi, 0
+    call gui_draw_text
     mov eax,[wm_editor_cursor_x]
     inc eax
     and eax,31
@@ -372,6 +390,13 @@ wm_draw_content:
     mov edx,8
     mov esi,1
     call graphics_fill_rect
+    mov eax,[wm_x+edi*4]
+    add eax,10
+    mov ebx,[wm_y+edi*4]
+    add ebx,23
+    mov esi, wm_txt_files
+    mov edi, 15
+    call gui_draw_text
     add ebx,14
     mov esi,3
     call graphics_fill_rect
@@ -389,6 +414,13 @@ wm_draw_content:
     mov edx,6
     mov esi,14
     call graphics_fill_rect
+    mov eax,[wm_x+edi*4]
+    add eax,10
+    mov ebx,[wm_y+edi*4]
+    add ebx,23
+    mov esi, wm_txt_notes
+    mov edi, 0
+    call gui_draw_text
     add ebx,10
     call graphics_fill_rect
     add ebx,10
@@ -403,6 +435,13 @@ wm_draw_content:
     mov edx,10
     mov esi,12
     call graphics_fill_rect
+    mov eax,[wm_x+edi*4]
+    add eax,10
+    mov ebx,[wm_y+edi*4]
+    add ebx,36
+    mov esi, wm_txt_explr
+    mov edi, 15
+    call gui_draw_text
     add eax,16
     mov ecx,16
     mov edx,18
@@ -442,7 +481,19 @@ wm_draw_content:
     jmp .d2d
 .d2: mov esi,4
 .d2d: call graphics_fill_rect
+    mov eax,[wm_x+edi*4]
+    add eax,10
+    mov ebx,[wm_y+edi*4]
+    add ebx,23
+    mov esi, wm_txt_drv
+    mov edi, 15
+    call gui_draw_text
 .out:
     popad
     ret
+wm_txt_editor db 'EDITOR',0
+wm_txt_files db 'FILES',0
+wm_txt_notes db 'NOTES',0
+wm_txt_explr db 'EXPLORER',0
+wm_txt_drv db 'DRIVERS',0
 %endif
