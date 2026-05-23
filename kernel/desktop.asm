@@ -2,8 +2,13 @@
 %define LA_DESKTOP_ASM
 
 desktop_prev_left dd 0
+desktop_click_edge dd 0
+desktop_wallpaper_inited dd 0
+DESKTOP_WALLPAPER_BUF equ 0x00300000
 
 desktop_launch:
+    ; Garantizar IRQs activas al entrar al entorno gráfico.
+    sti
     mov esi, vga_regs_13h
     call vga_write_regs
     call graphics_init
@@ -11,6 +16,7 @@ desktop_launch:
     call keyboard_init
     call mouse_init_gui
     call wm_init
+    call desktop_wallpaper_init
     call taskbar_init
     call applications_init
     mov esi, desktop_title
@@ -23,6 +29,7 @@ desktop_launch:
     call mouse_update
     call keyboard_update
 
+    mov dword [desktop_click_edge], 0
     mov eax, [mouse_buttons]
     and eax, 1
     mov ebx, [desktop_prev_left]
@@ -43,12 +50,20 @@ desktop_launch:
     or ebx, ecx
     call evq_push
     mov edx, 1
+    mov dword [desktop_click_edge], 1
 .noedge:
     mov eax, [mouse_x]
     mov ebx, [mouse_y]
     mov ecx, [mouse_buttons]
     and ecx, 1
+    call wm_handle_mouse
+    mov eax, [mouse_x]
+    mov ebx, [mouse_y]
+    mov edx, [desktop_click_edge]
     call taskbar_handle_mouse
+    mov eax, [mouse_x]
+    mov ebx, [mouse_y]
+    mov edx, [desktop_click_edge]
     call start_menu_handle_mouse
 
     mov al, 1
@@ -76,4 +91,43 @@ desktop_launch:
     ret
 
 desktop_title db 'Desktop',0
+
+desktop_wallpaper_init:
+    cmp dword [desktop_wallpaper_inited], 1
+    je .done
+    mov edi, DESKTOP_WALLPAPER_BUF
+    xor ebx, ebx                    ; y
+.row:
+    cmp ebx, 188
+    jge .set
+    xor eax, eax                    ; x
+.col:
+    cmp eax, 320
+    jge .next_row
+    mov edx, eax
+    shr edx, 4
+    mov ecx, ebx
+    shr ecx, 4
+    xor edx, ecx
+    and edx, 1
+    cmp edx, 0
+    jne .c2
+    mov dl, 1
+    jmp .st
+.c2:
+    mov dl, 3
+.st:
+    mov [edi], dl
+    inc edi
+    inc eax
+    jmp .col
+.next_row:
+    inc ebx
+    jmp .row
+.set:
+    mov esi, DESKTOP_WALLPAPER_BUF
+    call renderer_set_wallpaper_raw
+    mov dword [desktop_wallpaper_inited], 1
+.done:
+    ret
 %endif
