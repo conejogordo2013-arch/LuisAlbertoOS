@@ -18,17 +18,21 @@ start_menu_handle_mouse:
     cmp ebx,210
     ja .close
     ; launch apps
-    cmp ebx,130
+    cmp ebx,128
     jbe .app0
-    cmp ebx,142
+    cmp ebx,140
     jbe .app1
-    cmp ebx,154
+    cmp ebx,152
     jbe .app2
-    cmp ebx,166
+    cmp ebx,164
     jbe .app3
-    cmp ebx,178
-    jbe .mkfile
+    cmp ebx,176
+    jbe .app4
+    cmp ebx,188
+    jbe .app5
     cmp ebx,198
+    jbe .mkfile
+    cmp ebx,204
     jbe .reboot
     jmp .shutdown
 .app0: mov eax,0
@@ -44,6 +48,14 @@ start_menu_handle_mouse:
     mov dword [tb_start_open],0
     ret
 .app3: mov eax,3
+    call applications_launch
+    mov dword [tb_start_open],0
+    ret
+.app4: mov eax,4
+    call applications_launch
+    mov dword [tb_start_open],0
+    ret
+.app5: mov eax,5
     call applications_launch
     mov dword [tb_start_open],0
     ret
