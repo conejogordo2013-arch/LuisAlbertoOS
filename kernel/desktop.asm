@@ -2,8 +2,11 @@
 %define LA_DESKTOP_ASM
 
 desktop_prev_left dd 0
+desktop_click_edge dd 0
 
 desktop_launch:
+    ; Garantizar IRQs activas al entrar al entorno gráfico.
+    sti
     mov esi, vga_regs_13h
     call vga_write_regs
     call graphics_init
@@ -23,6 +26,7 @@ desktop_launch:
     call mouse_update
     call keyboard_update
 
+    mov dword [desktop_click_edge], 0
     mov eax, [mouse_buttons]
     and eax, 1
     mov ebx, [desktop_prev_left]
@@ -43,13 +47,46 @@ desktop_launch:
     or ebx, ecx
     call evq_push
     mov edx, 1
+    mov dword [desktop_click_edge], 1
 .noedge:
     mov eax, [mouse_x]
     mov ebx, [mouse_y]
     mov ecx, [mouse_buttons]
     and ecx, 1
+    call wm_handle_mouse
+    mov eax, [mouse_x]
+    mov ebx, [mouse_y]
+    mov edx, [desktop_click_edge]
     call taskbar_handle_mouse
+    mov eax, [mouse_x]
+    mov ebx, [mouse_y]
+    mov edx, [desktop_click_edge]
     call start_menu_handle_mouse
+    ; iconos escritorio (click izquierdo)
+    cmp dword [desktop_click_edge],1
+    jne .draw
+    mov eax,[mouse_x]
+    mov ebx,[mouse_y]
+    cmp ebx,12
+    jb .draw
+    cmp ebx,26
+    ja .draw
+    cmp eax,10
+    jbe .i0
+    cmp eax,28
+    jbe .i1
+    cmp eax,46
+    jbe .i2
+    jmp .draw
+.i0: mov eax,0
+    call applications_launch
+    jmp .draw
+.i1: mov eax,1
+    call applications_launch
+    jmp .draw
+.i2: mov eax,3
+    call applications_launch
+.draw:
 
     mov al, 1
     call graphics_clear_backbuffer
@@ -76,4 +113,5 @@ desktop_launch:
     ret
 
 desktop_title db 'Desktop',0
+
 %endif
