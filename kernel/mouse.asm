@@ -10,15 +10,25 @@ mouse_irq_handler:
     ret
 
 mouse_update:
-    ; Fallback robusto: drena bytes pendientes del controlador PS/2 por polling
-    ; en caso de que la IRQ12 no llegue de forma consistente en cierto emulador.
+    ; Fallback robusto: drena bytes pendientes por polling en cada frame.
+    ; Algunos emuladores no marcan siempre AUX(bit5) aunque sí entregan bytes
+    ; válidos de mouse; aceptamos ambos caminos para no “congelar” el cursor.
 .poll:
     in al, 0x64
     test al, 1
     jz .done
-    test al, 0x20
-    jz .done
+    mov ah, al
     in al, 0x60
+    test ah, 0x20
+    jnz .feed
+    ; Si AUX no está marcado, aún así intentamos sincronizar paquete PS/2:
+    ; sólo tratamos como primer byte si trae bit3=1.
+    mov ebx, [mouse_byte_index]
+    cmp ebx, 0
+    jne .feed
+    test al, 0x08
+    jz .done
+.feed:
     call mouse_irq_handle_byte
     jmp .poll
 .done:
