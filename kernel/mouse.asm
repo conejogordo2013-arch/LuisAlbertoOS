@@ -1,8 +1,11 @@
 %ifndef LA_DESKTOP_MOUSE_ASM
 %define LA_DESKTOP_MOUSE_ASM
 
+mouse_poll_idle_frames dd 0
+
 mouse_init_gui:
     call mouse_init
+    mov dword [mouse_poll_idle_frames], 0
     ret
 
 mouse_irq_handler:
@@ -32,6 +35,15 @@ mouse_update:
     call mouse_irq_handle_byte
     jmp .poll
 .done:
+    ; Si el init de mouse falla (mouse_ready=0), reintentar periódicamente.
+    cmp dword [mouse_ready], 0
+    jne .ret_done
+    inc dword [mouse_poll_idle_frames]
+    cmp dword [mouse_poll_idle_frames], 180
+    jb .ret_done
+    call mouse_init
+    mov dword [mouse_poll_idle_frames], 0
+.ret_done:
     ret
 
 mouse_cursor_draw:
