@@ -29,22 +29,6 @@ mouse_update:
     call mouse_irq_handle_byte
     jmp .poll
 .done:
-    ; Si no llegan paquetes, reintentar init periódicamente (QEMU/VM timing).
-    mov eax, [mouse_packets]
-    cmp eax, [mouse_last_packets]
-    jne .has_progress
-    inc dword [mouse_poll_idle_frames]
-    cmp dword [mouse_poll_idle_frames], 180
-    jb .ret_done
-    call mouse_init
-    mov dword [mouse_poll_idle_frames], 0
-    mov eax, [mouse_packets]
-    mov [mouse_last_packets], eax
-    jmp .ret_done
-.has_progress:
-    mov [mouse_last_packets], eax
-    mov dword [mouse_poll_idle_frames], 0
-.ret_done:
     ret
 
 mouse_cursor_draw:
