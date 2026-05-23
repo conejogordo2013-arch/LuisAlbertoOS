@@ -259,8 +259,8 @@ isr_irq12:
     in al,0x64
     test al, 1
     jz .eoi
-    test al, 0x20
-    jz .eoi
+    ; En IRQ12 confiamos en la fuente de interrupción (mouse). Algunos
+    ; emuladores no mantienen AUX(bit5) estable en este punto.
     in al,0x60
     call mouse_irq_handle_byte
     mov eax, 0x1000002C

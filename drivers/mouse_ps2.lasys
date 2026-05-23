@@ -97,29 +97,23 @@ mouse_init:
     out 0x60, al
 
     ; Set defaults + enable streaming
+    ; Set defaults + enable streaming.
+    ; Modo tolerante: algunos emuladores no entregan ACK (0xFA) de forma
+    ; consistente aunque sí entregan paquetes luego.
     mov al, 0xF6
     call mouse_write_dev
     call mouse_read_data_timeout
-    cmp eax, 1
-    jne .fail
-    cmp al, 0xFA
-    jne .fail
     mov al, 0xF4
     call mouse_write_dev
     call mouse_read_data_timeout
-    cmp eax, 1
-    jne .fail
-    cmp al, 0xFA
-    jne .fail
     mov dword [mouse_ready], 1
     mov dword [mouse_byte_index], 0
+    mov dword [mouse_x], 160
+    mov dword [mouse_y], 100
     mov dword [mouse_buttons], 0
     mov dword [mouse_buttons_prev], 0
     mov dword [mouse_buttons_edge], 0
     mov dword [mouse_wheel], 0
-    ret
-.fail:
-    mov dword [mouse_ready], 0
     ret
 
 mouse_irq_handle_byte:
