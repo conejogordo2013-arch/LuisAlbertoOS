@@ -274,9 +274,11 @@ isr_irq12:
 
 isr_syscall80:
     pusha
+    mov ebp, eax
     inc dword [syscall_count]
     mov eax, 0x20000080
     call interrupt_log_push
+    mov eax, ebp
     ; EAX=syscall
     cmp eax,1
     je .sys_puts
@@ -292,6 +294,12 @@ isr_syscall80:
     je .sys_exit
     cmp eax,7
     je .sys_taskstat
+    cmp eax,10
+    je .sys_draw_pixel
+    cmp eax,11
+    je .sys_draw_rect
+    cmp eax,12
+    je .sys_get_key
     jmp .done
 .sys_puts:
     ; EBX = ptr null-term string
@@ -338,6 +346,31 @@ isr_syscall80:
     jmp .done
 .sys_taskstat_fail:
     mov eax, 0xFFFFFFFF
+    mov [esp+28], eax
+    jmp .done
+.sys_draw_pixel:
+    ; ebx=x ecx=y edx=color
+    mov eax, ebx
+    mov ebx, ecx
+    mov esi, edx
+    call graphics_draw_pixel
+    xor eax, eax
+    mov [esp+28], eax
+    jmp .done
+.sys_draw_rect:
+    ; ebx=x ecx=y edx=w esi=h edi=color
+    mov eax, ebx
+    mov ebx, ecx
+    mov ecx, edx
+    mov edx, esi
+    mov esi, edi
+    call graphics_fill_rect
+    xor eax, eax
+    mov [esp+28], eax
+    jmp .done
+.sys_get_key:
+    call kbd_read_char
+    movzx eax, al
     mov [esp+28], eax
 .done:
     popa

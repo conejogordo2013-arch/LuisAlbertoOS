@@ -62,6 +62,29 @@ graphics_fill_rect:
     popad
     ret
 
+graphics_draw_pixel:
+    ; eax=x ebx=y esi=color
+    pushad
+    cmp eax, 0
+    jl .done
+    cmp ebx, 0
+    jl .done
+    cmp eax, GRAPH_WIDTH
+    jge .done
+    cmp ebx, GRAPH_HEIGHT
+    jge .done
+    mov eax, esi
+    mov [gfx_color_tmp], al
+    mov edi, ebx
+    imul edi, GRAPH_WIDTH
+    add edi, eax
+    add edi, GRAPH_BACKBUF
+    mov al, byte [gfx_color_tmp]
+    mov [edi], al
+.done:
+    popad
+    ret
+
 graphics_present:
     ; Copia completa al VRAM (doble buffer simple y estable)
     pushad

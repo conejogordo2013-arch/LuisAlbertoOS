@@ -11,6 +11,11 @@ draw_rect:
     call graphics_fill_rect
     ret
 
+draw_pixel:
+    ; eax=x ebx=y esi=color
+    call graphics_draw_pixel
+    ret
+
 get_event:
     call evq_pop
     ret
