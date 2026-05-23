@@ -16,8 +16,37 @@ taskbar_handle_mouse:
     cmp eax, 4
     jb .close
     cmp eax, 52
-    ja .close
+    jbe .toggle
+    cmp eax, 64
+    jb .close
+    cmp eax, 78
+    jbe .open_hello
+    cmp eax, 82
+    jb .close
+    cmp eax, 96
+    jbe .open_text
+    cmp eax, 100
+    jb .close
+    cmp eax, 114
+    jbe .open_files
+    jmp .close
+.toggle:
     xor dword [tb_start_open],1
+    ret
+.open_hello:
+    mov eax, 2
+    call applications_launch
+    mov dword [tb_start_open],0
+    ret
+.open_text:
+    mov eax, 3
+    call applications_launch
+    mov dword [tb_start_open],0
+    ret
+.open_files:
+    mov eax, 4
+    call applications_launch
+    mov dword [tb_start_open],0
     ret
 .close:
     mov dword [tb_start_open], 0
@@ -35,6 +64,19 @@ taskbar_draw:
     mov ecx, 48
     mov edx, 10
     mov esi, 2
+    call graphics_fill_rect
+    ; accesos rápidos
+    mov eax, 64
+    mov ebx, 189
+    mov ecx, 14
+    mov edx, 10
+    mov esi, 11
+    call graphics_fill_rect
+    mov eax, 82
+    mov esi, 10
+    call graphics_fill_rect
+    mov eax, 100
+    mov esi, 3
     call graphics_fill_rect
     ret
 
