@@ -7,6 +7,8 @@ desktop_wallpaper_inited dd 0
 DESKTOP_WALLPAPER_BUF equ 0x00300000
 
 desktop_launch:
+    ; Garantizar IRQs activas al entrar al entorno gráfico.
+    sti
     mov esi, vga_regs_13h
     call vga_write_regs
     call graphics_init
