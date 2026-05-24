@@ -25,27 +25,9 @@ gui_draw_text:
     ret
 
 gui_draw_glyph_bios:
-    ; ECX=x EBX=y EDX=char EDI=color (estilo BIOS 8x8)
-    ; Dibuja la fuente base desplazada para simular celda monoespaciada 8x8.
-    pushad
-    inc ecx
+    ; Ruta única y estable para texto GUI tipo BIOS.
+    ; Mantiene espaciado 8px desde gui_draw_text.
     call gui_draw_glyph
-    mov eax, ecx
-    add eax, 6
-    mov ebx, [esp+16]
-    add ebx, 6
-    mov esi, edi
-    call graphics_draw_pixel
-    mov eax, ecx
-    add eax, 1
-    mov ebx, [esp+16]
-    add ebx, 7
-    mov ecx, 5
-.baseline:
-    call graphics_draw_pixel
-    inc eax
-    loop .baseline
-    popad
     ret
 
 gui_draw_glyph:

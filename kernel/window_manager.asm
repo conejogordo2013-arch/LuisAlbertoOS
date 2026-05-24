@@ -26,6 +26,7 @@ wm_editor_cursor_x  dd 0
 wm_cmd_active       dd 0
 wm_cmd_len          dd 0
 wm_cmd_hist_pos     dd 0
+wm_cmd_last_scan    dd 0
 wm_cmd_line         times 64 db 0
 wm_cmd_hist0        times 64 db 0
 wm_cmd_hist1        times 64 db 0
@@ -42,6 +43,7 @@ wm_init:
     mov dword [wm_cmd_active], 0
     mov dword [wm_cmd_len], 0
     mov dword [wm_cmd_hist_pos], 0
+    mov dword [wm_cmd_last_scan], 0
     ret
 
 wm_cmd_scancode_to_ascii:
@@ -72,12 +74,12 @@ wm_cmd_scancode_to_ascii:
 
 wm_cmd_update:
     pushad
-.next:
-    call evq_pop
-    cmp eax, 0
+    mov ebx, [kbd_last_scan]
+    cmp ebx, [wm_cmd_last_scan]
     je .done
-    cmp eax, EVENT_KEY_DOWN
-    jne .next
+    mov [wm_cmd_last_scan], ebx
+    test bl, 0x80
+    jnz .done
     cmp bl, 0x1C
     je .enter
     cmp bl, 0x0E
@@ -88,23 +90,23 @@ wm_cmd_update:
     je .down
     call wm_cmd_scancode_to_ascii
     test al, al
-    jz .next
+    jz .done
     mov ecx, [wm_cmd_len]
     cmp ecx, 62
-    jae .next
+    jae .done
     mov [wm_cmd_line+ecx], al
     inc ecx
     mov [wm_cmd_len], ecx
     mov byte [wm_cmd_line+ecx], 0
-    jmp .next
+    jmp .done
 .back:
     mov ecx, [wm_cmd_len]
     test ecx, ecx
-    jz .next
+    jz .done
     dec ecx
     mov [wm_cmd_len], ecx
     mov byte [wm_cmd_line+ecx], 0
-    jmp .next
+    jmp .done
 .up:
     mov esi, wm_cmd_hist0
     mov edi, wm_cmd_line
@@ -112,7 +114,7 @@ wm_cmd_update:
     mov esi, wm_cmd_line
     call wm_cmd_strlen
     mov [wm_cmd_len], eax
-    jmp .next
+    jmp .done
 .down:
     mov esi, wm_cmd_hist1
     mov edi, wm_cmd_line
@@ -120,7 +122,7 @@ wm_cmd_update:
     mov esi, wm_cmd_line
     call wm_cmd_strlen
     mov [wm_cmd_len], eax
-    jmp .next
+    jmp .done
 .enter:
     mov esi, wm_cmd_line
     mov edi, wm_cmd_help
@@ -173,7 +175,7 @@ wm_cmd_update:
     call strcpy
     mov dword [wm_cmd_len], 0
     mov byte [wm_cmd_line], 0
-    jmp .next
+    jmp .done
 .done:
     popad
     ret
@@ -615,6 +617,7 @@ wm_draw_content:
     jmp .out
 
 .cmd:
+    call wm_cmd_update
     mov eax,[wm_x+edi*4]
     add eax,6
     mov ebx,[wm_y+edi*4]
