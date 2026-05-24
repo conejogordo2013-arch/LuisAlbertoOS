@@ -2,9 +2,9 @@
 %define LA_START_MENU_ASM
 
 sm_newfile_name db 'n.txt',0
-sm_l0 db 'EXPLR',0
-sm_l1 db 'TASK',0
-sm_l2 db 'HELLOELF',0
+sm_l0 db 'CMD.ELF',0
+sm_l1 db 'NOTEPAD',0
+sm_l2 db 'DEMO.ELF',0
 sm_l3 db 'TXTEDIT',0
 sm_l4 db 'FILES',0
 sm_l5 db 'NOTES',0

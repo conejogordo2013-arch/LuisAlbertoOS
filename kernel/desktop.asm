@@ -13,9 +13,9 @@ desktop_drag_dy dd 0
 desktop_drag_moved dd 0
 desktop_icon_x dd 12, 12, 12, 12, 12, 12, 12
 desktop_icon_y dd 18, 46, 74, 102, 130, 158, 170
-desktop_icon_label0 db 'EXPLR',0
-desktop_icon_label1 db 'TASK',0
-desktop_icon_label2 db 'HELLO.ELF',0
+desktop_icon_label0 db 'CMD.ELF',0
+desktop_icon_label1 db 'NOTEPAD',0
+desktop_icon_label2 db 'DEMO.ELF',0
 desktop_icon_label3 db 'TXTEDIT',0
 desktop_icon_label4 db 'FILES',0
 desktop_icon_label5 db 'NOTES',0
