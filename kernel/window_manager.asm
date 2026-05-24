@@ -325,6 +325,7 @@ wm_find_index:
 
 wm_draw:
     pushad
+    call wm_cmd_update
     xor edi,edi
 .l2: cmp edi,[wm_count]
     jae .d
