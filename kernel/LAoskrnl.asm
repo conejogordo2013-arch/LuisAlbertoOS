@@ -52,6 +52,9 @@ oskrnl_main:
     mov dword [sata_present], 0
 
     call scheduler_register_kernel_main
+    ; Flujo principal: GUI primero (como pidió el proyecto).
+    ; Si el usuario sale del desktop, vuelve a shell estable.
+    call desktop_launch
     call shell_start
     ret
 

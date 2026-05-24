@@ -18,7 +18,9 @@ APP_SAMPLE_LBA=160
 APP_TEXTEDIT_LBA=162
 APP_TASKMGR_LBA=164
 APP_LATEXTEDIT_LBA=166
-APP_HELLO_ELF_LBA=168
+APP_CMD_ELF_LBA=168
+APP_NOTEPAD_ELF_LBA=176
+APP_DEMO_ELF_LBA=184
 FS_DIR_LBA=208
 FS_DATA_LBA=209
 
@@ -44,7 +46,9 @@ nasm -f bin apps/sample1.laa.asm -o bin/sample1.laa
 nasm -f bin apps/textedit.laa.asm -o bin/textedit.laa
 nasm -f bin apps/taskmgr.laa.asm -o bin/taskmgr.laa
 nasm -f bin apps/LATextedit.asm -o bin/LATextedit.laa
-nasm -f bin apps/hello.elf.asm -o bin/hello.elf
+nasm -f bin apps/cmd.elf.asm -o bin/cmd.elf
+nasm -f bin apps/notepad.elf.asm -o bin/notepad.elf
+nasm -f bin apps/demo.elf.asm -o bin/demo.elf
 
 # 3. Create image once
 dd if=/dev/zero of=LuisAlbertoOS.img bs=512 count=2880 status=none
@@ -58,7 +62,9 @@ dd if=bin/sample1.laa    of=LuisAlbertoOS.img seek=${APP_SAMPLE_LBA} conv=notrun
 dd if=bin/textedit.laa   of=LuisAlbertoOS.img seek=${APP_TEXTEDIT_LBA} conv=notrunc status=none
 dd if=bin/taskmgr.laa    of=LuisAlbertoOS.img seek=${APP_TASKMGR_LBA} conv=notrunc status=none
 dd if=bin/LATextedit.laa of=LuisAlbertoOS.img seek=${APP_LATEXTEDIT_LBA} conv=notrunc status=none
-dd if=bin/hello.elf     of=LuisAlbertoOS.img seek=${APP_HELLO_ELF_LBA} conv=notrunc status=none
+dd if=bin/cmd.elf      of=LuisAlbertoOS.img seek=${APP_CMD_ELF_LBA} conv=notrunc status=none
+dd if=bin/notepad.elf  of=LuisAlbertoOS.img seek=${APP_NOTEPAD_ELF_LBA} conv=notrunc status=none
+dd if=bin/demo.elf     of=LuisAlbertoOS.img seek=${APP_DEMO_ELF_LBA} conv=notrunc status=none
 
 # 6. Mock FS directory (optional demo data). Entry size: 26 bytes.
 FS_DATA_LBA=${FS_DATA_LBA} python3 - <<'PY'
