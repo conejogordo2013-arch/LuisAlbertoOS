@@ -23,6 +23,15 @@ wm_z                times WM_MAX_WINDOWS dd 0
 wm_flags            times WM_MAX_WINDOWS dd 0
 wm_title            times WM_MAX_WINDOWS*WM_TITLE_MAX db 0
 wm_editor_cursor_x  dd 0
+wm_cmd_active       dd 0
+wm_cmd_len          dd 0
+wm_cmd_hist_pos     dd 0
+wm_cmd_line         times 64 db 0
+wm_cmd_hist0        times 64 db 0
+wm_cmd_hist1        times 64 db 0
+wm_cmd_out0         db 'GUI CMD READY',0
+wm_cmd_out1         db 'help: HELP CLEAR APPS MEMINFO',0
+wm_cmd_out2         db '>',0
 
 wm_init:
     mov dword [wm_next_id], 1
@@ -30,6 +39,154 @@ wm_init:
     mov dword [wm_focus_id], 0
     mov dword [wm_drag_id], 0
     mov dword [wm_editor_cursor_x], 0
+    mov dword [wm_cmd_active], 0
+    mov dword [wm_cmd_len], 0
+    mov dword [wm_cmd_hist_pos], 0
+    ret
+
+wm_cmd_scancode_to_ascii:
+    ; in BL=scancode out AL=ascii/0
+    xor eax, eax
+    cmp bl, 0x1E
+    jb .num
+    cmp bl, 0x32
+    ja .sp
+    ; tabla letras (set 1)
+    movzx ebx, bl
+    mov al, [wm_cmd_alpha + ebx - 0x1E]
+    ret
+.num:
+    cmp bl, 0x02
+    jb .sp
+    cmp bl, 0x0B
+    ja .sp
+    movzx ebx, bl
+    mov al, [wm_cmd_nums + ebx - 0x02]
+    ret
+.sp:
+    cmp bl, 0x39
+    jne .ret
+    mov al, ' '
+.ret:
+    ret
+
+wm_cmd_update:
+    pushad
+.next:
+    call evq_pop
+    cmp eax, 0
+    je .done
+    cmp eax, EVENT_KEY_DOWN
+    jne .next
+    cmp bl, 0x1C
+    je .enter
+    cmp bl, 0x0E
+    je .back
+    cmp bl, 0x48
+    je .up
+    cmp bl, 0x50
+    je .down
+    call wm_cmd_scancode_to_ascii
+    test al, al
+    jz .next
+    mov ecx, [wm_cmd_len]
+    cmp ecx, 62
+    jae .next
+    mov [wm_cmd_line+ecx], al
+    inc ecx
+    mov [wm_cmd_len], ecx
+    mov byte [wm_cmd_line+ecx], 0
+    jmp .next
+.back:
+    mov ecx, [wm_cmd_len]
+    test ecx, ecx
+    jz .next
+    dec ecx
+    mov [wm_cmd_len], ecx
+    mov byte [wm_cmd_line+ecx], 0
+    jmp .next
+.up:
+    mov esi, wm_cmd_hist0
+    mov edi, wm_cmd_line
+    call strcpy
+    mov esi, wm_cmd_line
+    call wm_cmd_strlen
+    mov [wm_cmd_len], eax
+    jmp .next
+.down:
+    mov esi, wm_cmd_hist1
+    mov edi, wm_cmd_line
+    call strcpy
+    mov esi, wm_cmd_line
+    call wm_cmd_strlen
+    mov [wm_cmd_len], eax
+    jmp .next
+.enter:
+    mov esi, wm_cmd_line
+    mov edi, wm_cmd_help
+    call strcmp
+    cmp eax,0
+    jne .c1
+    mov esi, wm_cmd_rsp_help
+    mov edi, wm_cmd_out0
+    call strcpy
+    jmp .store
+.c1:
+    mov esi, wm_cmd_line
+    mov edi, wm_cmd_clear
+    call strcmp
+    cmp eax,0
+    jne .c2
+    mov byte [wm_cmd_out0], 0
+    mov byte [wm_cmd_out1], 0
+    jmp .store
+.c2:
+    mov esi, wm_cmd_line
+    mov edi, wm_cmd_apps
+    call strcmp
+    cmp eax,0
+    jne .c3
+    mov esi, wm_cmd_rsp_apps
+    mov edi, wm_cmd_out0
+    call strcpy
+    jmp .store
+.c3:
+    mov esi, wm_cmd_line
+    mov edi, wm_cmd_mem
+    call strcmp
+    cmp eax,0
+    jne .unk
+    mov esi, wm_cmd_rsp_mem
+    mov edi, wm_cmd_out0
+    call strcpy
+    jmp .store
+.unk:
+    mov esi, wm_cmd_rsp_unk
+    mov edi, wm_cmd_out0
+    call strcpy
+.store:
+    mov esi, wm_cmd_hist0
+    mov edi, wm_cmd_hist1
+    call strcpy
+    mov esi, wm_cmd_line
+    mov edi, wm_cmd_hist0
+    call strcpy
+    mov dword [wm_cmd_len], 0
+    mov byte [wm_cmd_line], 0
+    jmp .next
+.done:
+    popad
+    ret
+
+wm_cmd_strlen:
+    ; in ESI out EAX=len
+    xor eax, eax
+.l:
+    cmp byte [esi+eax], 0
+    je .o
+    inc eax
+    jmp .l
+.o:
     ret
 
 window_create:
@@ -166,6 +323,7 @@ wm_find_index:
 
 wm_draw:
     pushad
+    call wm_cmd_update
     xor edi,edi
 .l2: cmp edi,[wm_count]
     jae .d
@@ -346,6 +504,8 @@ wm_draw_content:
     je .notes
     cmp al, 'E'
     je .explr
+    cmp al, 'C'
+    je .cmd
     jmp .driver_mgr
 
 .textedit:
@@ -453,6 +613,36 @@ wm_draw_content:
     mov esi,2
     call graphics_fill_rect
     jmp .out
+
+.cmd:
+    mov eax,[wm_x+edi*4]
+    add eax,6
+    mov ebx,[wm_y+edi*4]
+    add ebx,20
+    mov ecx,[wm_w+edi*4]
+    sub ecx,12
+    mov edx,[wm_h+edi*4]
+    sub edx,26
+    mov esi,0
+    call graphics_fill_rect
+    mov eax,[wm_x+edi*4]
+    add eax,8
+    mov ebx,[wm_y+edi*4]
+    add ebx,22
+    mov esi, wm_cmd_out0
+    mov edi, 15
+    call gui_draw_text
+    add ebx,10
+    mov esi, wm_cmd_out1
+    call gui_draw_text
+    add ebx,10
+    mov esi, wm_cmd_out2
+    call gui_draw_text
+    mov eax,[wm_x+edi*4]
+    add eax,16
+    mov esi, wm_cmd_line
+    call gui_draw_text
+    jmp .out
 .driver_mgr:
     mov eax,[wm_x+edi*4]
     add eax,8
@@ -496,4 +686,19 @@ wm_txt_files db 'FILES',0
 wm_txt_notes db 'NOTES',0
 wm_txt_explr db 'EXPLORER',0
 wm_txt_drv db 'DRIVERS',0
+wm_txt_cmd0 db 'GUI CMD',0
+wm_txt_cmd1 db 'desktop=activo',0
+wm_txt_cmd2 db 'apps: HELLO TXT FILES',0
+wm_txt_cmd3 db 'power: REBOOT/OFF',0
+wm_txt_cmd4 db 'shell legacy removida',0
+wm_cmd_alpha db 'ASDFGHJKL',0,0,'ZXCVBNM'
+wm_cmd_nums  db '1234567890'
+wm_cmd_help db 'HELP',0
+wm_cmd_clear db 'CLEAR',0
+wm_cmd_apps db 'APPS',0
+wm_cmd_mem db 'MEMINFO',0
+wm_cmd_rsp_help db 'COMANDOS: HELP CLEAR APPS MEMINFO',0
+wm_cmd_rsp_apps db 'APPS: EXPLR TASK HELLO TXT FILES NOTES CMD',0
+wm_cmd_rsp_mem db 'MEMINFO: KERNEL MEMORY ONLINE',0
+wm_cmd_rsp_unk db 'ERR: COMANDO NO SOPORTADO',0
 %endif

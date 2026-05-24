@@ -44,7 +44,8 @@ taskbar_handle_mouse:
     xor dword [tb_start_open],1
     ret
 .open_terminal:
-    mov dword [desktop_should_exit], 1
+    mov eax, 6
+    call applications_launch
     mov dword [tb_start_open],0
     ret
 .open_hello:
