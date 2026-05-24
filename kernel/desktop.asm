@@ -10,6 +10,7 @@ DESKTOP_ICON_COUNT equ 7
 desktop_drag_icon_id dd -1
 desktop_drag_dx dd 0
 desktop_drag_dy dd 0
+desktop_drag_moved dd 0
 desktop_icon_x dd 12, 12, 12, 12, 12, 12, 12
 desktop_icon_y dd 18, 46, 74, 102, 130, 158, 170
 desktop_icon_label0 db 'EXPLR',0
@@ -127,6 +128,7 @@ desktop_icons_handle_mouse:
     cmp eax, -1
     je .done
     mov [desktop_drag_icon_id], eax
+    mov dword [desktop_drag_moved], 0
     mov esi, eax
     mov edi, [desktop_icon_x+esi*4]
     mov ebp, [desktop_icon_y+esi*4]
@@ -161,12 +163,15 @@ desktop_icons_handle_mouse:
     mov edx, 168
 .dy_ok2:
     mov [desktop_icon_y+esi*4], edx
+    mov dword [desktop_drag_moved], 1
     jmp .done
 .release:
     cmp dword [desktop_drag_icon_id], -1
     je .done
     cmp edx, 1
     jne .clear
+    cmp dword [desktop_drag_moved], 1
+    je .clear
     mov eax, [desktop_drag_icon_id]
     call applications_launch
 .clear:
@@ -216,7 +221,7 @@ desktop_icons_draw:
     jae .out
     mov eax, [desktop_icon_x+ebp*4]
     mov ebx, [desktop_icon_y+ebp*4]
-    mov ecx, 10
+    mov ecx, 12
     mov edx, 10
     mov edi, ebp
     cmp edi, 2
@@ -229,8 +234,30 @@ desktop_icons_draw:
     jmp .draw_icon
 .file: mov edi, 14
 .draw_icon:
+    push ebp
     mov esi, edi
     call graphics_fill_rect
+    pop ebp
+    push ebp
+    mov eax, [desktop_icon_x+ebp*4]
+    add eax, 1
+    mov ebx, [desktop_icon_y+ebp*4]
+    add ebx, 2
+    mov ecx, 4
+    mov edx, 6
+    mov esi, 15
+    call graphics_fill_rect
+    pop ebp
+    push ebp
+    mov eax, [desktop_icon_x+ebp*4]
+    add eax, 6
+    mov ebx, [desktop_icon_y+ebp*4]
+    add ebx, 2
+    mov ecx, 4
+    mov edx, 6
+    mov esi, 1
+    call graphics_fill_rect
+    pop ebp
     mov ecx, 54
     mov edx, 9
     mov esi, 1
