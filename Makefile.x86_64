@@ -1,0 +1,10 @@
+NASM ?= nasm
+LD ?= x86_64-elf-ld
+
+all: build64
+
+build64:
+	$(NASM) -f elf64 gui/desktop64.asm -o bin/desktop64.o
+	$(NASM) -f elf64 gui/font64.asm -o bin/font64.o
+	$(NASM) -f elf64 window/window64.asm -o bin/window64.o
+	@echo "x86_64 objects generated in bin/. Integrate with your kernel linker script."
