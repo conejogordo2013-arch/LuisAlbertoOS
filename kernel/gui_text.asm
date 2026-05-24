@@ -16,12 +16,18 @@ gui_draw_text:
 .u:
     mov ecx, eax
     movzx edx, dl
-    call gui_draw_glyph
-    add eax, 6
+    call gui_draw_glyph_bios
+    add eax, 8
     inc esi
     jmp .n
 .o:
     popad
+    ret
+
+gui_draw_glyph_bios:
+    ; ECX=x EBX=y EDX=char EDI=color (compatibilidad BIOS)
+    ; Reutiliza la fuente del sistema para mantener legibilidad en modo gráfico.
+    call gui_draw_glyph
     ret
 
 gui_draw_glyph:
@@ -133,5 +139,8 @@ gui_font_digits:
 gui_font_colon db 0x00,0x0A,0x00,0x00,0x00
 gui_font_dash  db 0x04,0x04,0x04,0x00,0x00
 gui_font_dot   db 0x10,0x00,0x00,0x00,0x00
+
+gui_font_bios_unknown:
+    db 0x3C,0x42,0x81,0xA5,0x81,0x99,0x42,0x3C
 
 %endif

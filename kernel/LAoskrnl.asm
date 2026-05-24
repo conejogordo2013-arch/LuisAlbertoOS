@@ -52,7 +52,8 @@ oskrnl_main:
     mov dword [sata_present], 0
 
     call scheduler_register_kernel_main
-    call shell_start
+    ; Flujo principal ahora totalmente GUI.
+    call desktop_launch
     ret
 
 welcome_msg db "Welcome to LuisAlbertoOS Core v1.0 Compilation 1.2.57.796", 0

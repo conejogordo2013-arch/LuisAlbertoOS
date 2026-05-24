@@ -346,6 +346,8 @@ wm_draw_content:
     je .notes
     cmp al, 'E'
     je .explr
+    cmp al, 'C'
+    je .cmd
     jmp .driver_mgr
 
 .textedit:
@@ -453,6 +455,38 @@ wm_draw_content:
     mov esi,2
     call graphics_fill_rect
     jmp .out
+
+.cmd:
+    mov eax,[wm_x+edi*4]
+    add eax,6
+    mov ebx,[wm_y+edi*4]
+    add ebx,20
+    mov ecx,[wm_w+edi*4]
+    sub ecx,12
+    mov edx,[wm_h+edi*4]
+    sub edx,26
+    mov esi,0
+    call graphics_fill_rect
+    mov eax,[wm_x+edi*4]
+    add eax,8
+    mov ebx,[wm_y+edi*4]
+    add ebx,22
+    mov esi, wm_txt_cmd0
+    mov edi, 15
+    call gui_draw_text
+    add ebx,10
+    mov esi, wm_txt_cmd1
+    call gui_draw_text
+    add ebx,10
+    mov esi, wm_txt_cmd2
+    call gui_draw_text
+    add ebx,10
+    mov esi, wm_txt_cmd3
+    call gui_draw_text
+    add ebx,10
+    mov esi, wm_txt_cmd4
+    call gui_draw_text
+    jmp .out
 .driver_mgr:
     mov eax,[wm_x+edi*4]
     add eax,8
@@ -496,4 +530,9 @@ wm_txt_files db 'FILES',0
 wm_txt_notes db 'NOTES',0
 wm_txt_explr db 'EXPLORER',0
 wm_txt_drv db 'DRIVERS',0
+wm_txt_cmd0 db 'GUI CMD',0
+wm_txt_cmd1 db 'desktop=activo',0
+wm_txt_cmd2 db 'apps: HELLO TXT FILES',0
+wm_txt_cmd3 db 'power: REBOOT/OFF',0
+wm_txt_cmd4 db 'shell legacy removida',0
 %endif
